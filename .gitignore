@@ -1,0 +1,17 @@
+# macOS / Windows OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log
+
+# Nothing else needed — this is a pure static site, no build step,
+# no node_modules, no secrets (config.js is safe to commit since
+# the anon key respects Row Level Security).

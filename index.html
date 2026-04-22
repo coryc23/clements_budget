@@ -1,0 +1,1986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Clements Fam Budget</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+
+<!-- PWA: web app manifest and related meta tags -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#faf7f2">
+<!-- iOS-specific PWA meta -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<!-- Favicons -->
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png">
+
+<!-- Supabase JS SDK (for auth + data fetch) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Local config — edit config.js to paste your Supabase URL + publishable key -->
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --bg-elev: #ffffff;
+    --bg-soft: #f2ede4;
+    --ink: #1f1d1a;
+    --ink-2: #4a463f;
+    --ink-3: #857f74;
+    --line: #e9e2d5;
+    --line-strong: #d8cfbd;
+
+    --sage:       oklch(0.72 0.09 150);
+    --sage-soft:  oklch(0.94 0.04 150);
+    --sage-ink:   oklch(0.38 0.07 150);
+
+    --terracotta: oklch(0.72 0.09 40);
+    --terra-soft: oklch(0.94 0.04 40);
+    --terra-ink:  oklch(0.38 0.07 40);
+
+    --blue:       oklch(0.72 0.09 240);
+    --blue-soft:  oklch(0.94 0.04 240);
+    --blue-ink:   oklch(0.38 0.07 240);
+
+    --amber:      oklch(0.78 0.09 80);
+    --amber-soft: oklch(0.94 0.04 80);
+    --amber-ink:  oklch(0.42 0.07 80);
+
+    --plum:       oklch(0.72 0.09 330);
+    --plum-soft:  oklch(0.94 0.04 330);
+    --plum-ink:   oklch(0.38 0.07 330);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .serif { font-family: 'Fraunces', serif; font-optical-sizing: auto; letter-spacing: -0.01em; }
+
+  button { font-family: inherit; font-size: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  input, select { font-family: inherit; color: inherit; font-size: inherit; }
+
+  .app { max-width: 1380px; margin: 0 auto; padding: 24px 24px 80px; }
+
+  /* topbar */
+  .topbar {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+    padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark { width: 64px; height: 64px; flex-shrink: 0; }
+  .brand-mark svg { width: 100%; height: 100%; display: block; }
+  .brand h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 22px; margin: 0; letter-spacing: -0.02em; }
+  .brand .sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+  .month-switch { display: flex; align-items: center; gap: 4px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+  .month-switch button { width: 28px; height: 28px; border-radius: 999px; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s; }
+  .month-switch button:hover { background: var(--bg-soft); }
+  .month-switch .label { font-weight: 500; padding: 0 10px; min-width: 130px; text-align: center; }
+
+  .view-switch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .view-switch .seg { display: inline-flex; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+  .view-switch .seg button { padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--ink-3); transition: all 0.15s; }
+  .view-switch .seg button:hover { color: var(--ink-2); }
+  .view-switch .seg button.on { background: var(--ink); color: var(--bg); }
+  .view-switch select { padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev); font-weight: 500; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .view-switch select:hover { border-color: var(--line-strong); }
+  .view-switch select:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+  .actions { display: flex; gap: 8px; }
+  .btn { border: 1px solid var(--line); background: var(--bg-elev); padding: 8px 14px; border-radius: 10px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .btn:hover { border-color: var(--line-strong); }
+  .btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn-primary:hover { background: #000; }
+  .btn svg { display: block; }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+
+  /* Allocation strip */
+  .alloc-strip { display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; margin-bottom: 18px; border-radius: 999px; background: var(--bg-soft); border: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+
+  /* Fact card */
+  .fact-card { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; background: linear-gradient(135deg, var(--amber-soft) 0%, var(--bg-elev) 70%); border: 1px solid var(--line); border-radius: 14px; position: relative; }
+  .fact-icon { font-size: 28px; flex-shrink: 0; line-height: 1; padding-top: 2px; }
+  .fact-body { flex: 1; min-width: 0; }
+  .fact-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; margin-bottom: 4px; }
+  .fact-text { font-size: 14px; color: var(--ink); line-height: 1.5; }
+  .fact-hint { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; position: absolute; top: 10px; right: 14px; opacity: 0.6; }
+  .alloc-period { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; font-size: 10px; }
+  .alloc-sep { color: var(--ink-3); opacity: 0.5; }
+  .alloc-label { color: var(--ink-2); }
+  .alloc-amount { font-size: 13px; font-weight: 600; }
+  .alloc-amount.ok    { color: var(--sage-ink); }
+  .alloc-amount.under { color: var(--amber-ink); }
+  .alloc-amount.over  { color: var(--terra-ink); }
+  .card { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .card.feature { background: linear-gradient(135deg, #fefcf8 0%, var(--bg-elev) 100%); display: flex; flex-direction: column; justify-content: space-between; min-height: 170px; }
+  .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }
+  .stat-val { font-family: 'Fraunces', serif; font-weight: 500; letter-spacing: -0.02em; font-size: 36px; line-height: 1.05; margin-top: 6px; }
+  .stat-val.small { font-size: 22px; }
+  .stat-sub { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+  .pill.up { background: var(--sage-soft); color: var(--sage-ink); }
+  .pill.down { background: var(--terra-soft); color: var(--terra-ink); }
+
+  .donut-wrap { display: flex; align-items: center; gap: 14px; }
+  .donut { width: 110px; height: 110px; flex-shrink: 0; }
+  .donut text { font-family: 'Fraunces', serif; fill: var(--ink); }
+  .donut .caption { font-family: 'Inter', sans-serif; font-size: 8px; fill: var(--ink-3); letter-spacing: 0.15em; }
+  .legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 2px; background: var(--bg-soft); padding: 4px; border-radius: 12px; width: fit-content; margin-bottom: 18px; }
+  .tab { padding: 8px 16px; border-radius: 8px; font-weight: 500; color: var(--ink-2); transition: all 0.15s; }
+  .tab.active { background: var(--bg-elev); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .tab:hover:not(.active) { color: var(--ink); }
+
+  /* table */
+  .main-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+  .table-card { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .table-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .table-head h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; padding: 9px 14px; background: var(--bg-soft); border-bottom: 1px solid var(--line); }
+  thead th.num { text-align: right; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: #fdfbf6; }
+
+  .cat-cell { display: flex; align-items: center; gap: 10px; }
+  .cat-chip { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+  .cat-name { font-weight: 500; }
+  .cat-tag { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .editable { background: transparent; border: 1px solid transparent; padding: 3px 6px; border-radius: 6px; text-align: right; width: 90px; transition: all 0.15s; }
+  .editable:hover { border-color: var(--line); background: var(--bg); }
+  .editable:focus { outline: none; border-color: var(--ink); background: #fff; box-shadow: 0 0 0 3px var(--blue-soft); }
+
+  .bar-cell { min-width: 180px; }
+  .bar-wrap { display: flex; align-items: center; gap: 10px; }
+  .bar-track { flex: 1; height: 6px; background: var(--bg-soft); border-radius: 999px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width 0.35s cubic-bezier(.2,.7,.3,1); }
+  .bar-pct { font-size: 11px; color: var(--ink-3); min-width: 38px; text-align: right; }
+
+  .link-btn { background: none; border: 0; color: var(--sage-ink, var(--ink-2)); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
+  .link-btn:hover { color: var(--ink); }
+  .add-cat-row td { background: transparent; }
+  .add-cat-row:hover td { background: var(--bg-soft); }
+  .hidden-hint td { background: transparent; }
+
+  .row-group td { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; padding: 8px 14px; background: var(--bg-soft); }
+  .subtotal-row td { font-weight: 600; background: #fbf8f1; }
+
+  .delete-btn { opacity: 0; color: var(--ink-3); padding: 4px; border-radius: 4px; transition: all 0.15s; }
+  tr:hover .delete-btn { opacity: 1; }
+  .delete-btn:hover { color: var(--terra-ink); background: var(--terra-soft); }
+
+  .add-row { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; color: var(--ink-3); font-size: 13px; cursor: pointer; border-top: 1px dashed var(--line); transition: all 0.15s; }
+  .add-row:hover { background: var(--bg-soft); color: var(--ink); }
+
+  /* side */
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .side h3 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 16px; margin: 0 0 12px; letter-spacing: -0.01em; }
+
+  .insight { display: flex; gap: 10px; align-items: flex-start; padding: 11px; border-radius: 10px; background: var(--bg-soft); font-size: 13px; }
+  .insight + .insight { margin-top: 8px; }
+  .insight-icon { width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+
+  .spark { width: 100%; height: 64px; }
+  .mini-stat + .mini-stat { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .mini-stat-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .mini-stat-head .name { font-size: 13px; font-weight: 500; }
+  .mini-stat-head .vals { font-size: 12px; color: var(--ink-3); }
+
+  /* transactions */
+  .tx-form { display: grid; grid-template-columns: 130px 110px 1fr 110px 1fr auto; gap: 8px; padding: 12px 14px; background: var(--bg-soft); border-bottom: 1px solid var(--line); align-items: center; }
+  .tx-form input, .tx-form select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg-elev); }
+  .tx-form input:focus, .tx-form select:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .tx-form .btn-primary { padding: 7px 14px; border-radius: 7px; }
+  .tx-form label { grid-column: 1 / -1; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; margin-bottom: -2px; }
+
+  .tx-list { max-height: 480px; overflow-y: auto; }
+  .tx-row { display: grid; grid-template-columns: 96px 90px 1fr 1fr 100px auto; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--line); align-items: center; font-size: 13px; }
+  .tx-row:hover { background: #fdfbf6; }
+  .tx-row:last-child { border-bottom: 0; }
+  .tx-date { color: var(--ink-3); font-size: 12px; }
+  .tx-type { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; width: fit-content; }
+  .tx-type.income { background: var(--sage-soft); color: var(--sage-ink); }
+  .tx-type.expense { background: var(--terra-soft); color: var(--terra-ink); }
+  .tx-amount { text-align: right; font-weight: 500; }
+  .tx-amount.income { color: var(--sage-ink); }
+  .tx-amount.expense { color: var(--ink); }
+  .tx-details { color: var(--ink-3); font-size: 12px; }
+
+  .tx-filter { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--bg-elev); }
+  .tx-filter input, .tx-filter select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg-elev); font-size: 13px; }
+  .tx-filter input:focus, .tx-filter select:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+  /* modal */
+  .modal-back { position: fixed; inset: 0; background: rgba(20,18,14,0.4); backdrop-filter: blur(2px); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--bg-elev); border-radius: 16px; border: 1px solid var(--line); padding: 24px; width: 460px; max-width: calc(100vw - 40px); box-shadow: 0 20px 60px -10px rgba(0,0,0,0.25); }
+  .modal h3 { margin: 0 0 14px; font-family: 'Fraunces', serif; font-weight: 500; font-size: 20px; letter-spacing: -0.01em; }
+  .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; min-width: 0; }
+  .modal-row label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }
+  .modal-row input, .modal-row select { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: inherit; }
+  .modal-row input:focus, .modal-row select:focus { outline: none; border-color: var(--ink); background: #fff; box-shadow: 0 0 0 3px var(--blue-soft); }
+  .modal-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+  /* tweaks panel */
+  .tweaks-panel { position: fixed; bottom: 20px; right: 20px; width: 280px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.15); z-index: 100; display: none; }
+  .tweaks-panel.open { display: block; }
+  .tweaks-panel h4 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 15px; margin: 0 0 12px; }
+  .tweak-row { margin-bottom: 10px; }
+  .tweak-row label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); display: block; margin-bottom: 6px; font-weight: 600; }
+  .swatches { display: flex; gap: 6px; }
+  .swatch { width: 26px; height: 26px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; transition: transform 0.15s; }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch.active { border-color: var(--ink); }
+
+  body.theme-dark { --bg:#1a1916; --bg-elev:#24221e; --bg-soft:#2e2b26; --ink:#f5f1e8; --ink-2:#c8c1b3; --ink-3:#8a8477; --line:#3a3630; --line-strong:#4a4540; }
+  body.theme-dark .card.feature { background: linear-gradient(135deg, #26241f 0%, var(--bg-elev) 100%); }
+  body.theme-dark tbody tr:hover td, body.theme-dark .tx-row:hover { background: #2a2722; }
+  body.theme-dark .subtotal-row td { background: #2a2722; }
+  body.theme-cool { --bg:#f4f7fa; --bg-elev:#ffffff; --bg-soft:#e9eef4; --ink:#1a2330; --ink-2:#43536a; --ink-3:#7b879a; --line:#dde4ed; --line-strong:#c9d3e0; }
+  body.theme-sage { --bg:#f4f6f2; --bg-elev:#ffffff; --bg-soft:#e8ece2; --ink:#1d251c; --ink-2:#485344; --ink-3:#818c7d; --line:#dee3d8; --line-strong:#c6ccbe; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel-pending" data-presets="react">
+/*__IIFE_WRAPPED__*/ (() => {
+
+    const { useState, useMemo, useEffect } = React;
+
+    window.TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "theme": "cool",
+      "showAllTx": false
+    }/*EDITMODE-END*/;
+
+    // ---------- imported data from Super Budget.xlsx ----------
+    const YEAR = 2024;
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    // Per-year budgets, loaded from embedded JSON
+    let BUDGETS_BY_YEAR = {};
+    try {
+      const el = document.getElementById('imported-budgets');
+      BUDGETS_BY_YEAR = JSON.parse(el.textContent.trim() || '{}');
+    } catch(e) { console.warn('no imported-budgets', e); }
+
+    // Canonical category lists (stable order, independent of year)
+    const _years = Object.keys(BUDGETS_BY_YEAR).sort();
+    const _first = _years[0] && BUDGETS_BY_YEAR[_years[0]] ? BUDGETS_BY_YEAR[_years[0]] : {income:[],expenses:[],savings:[]};
+    const INCOME_CATS  = _first.income.map(r => r.name);
+    const EXPENSE_CATS = _first.expenses.map(r => r.name);
+    const SAVINGS_CATS = _first.savings.map(r => r.name);
+
+    // Helper: get the 12-month budget array for (year, type, name), defaulting to zeros
+    function budgetFor(year, type, name) {
+      const y = BUDGETS_BY_YEAR[String(year)];
+      if (!y) return new Array(12).fill(0);
+      const block = type === 'Income' ? y.income : type === 'Savings' ? y.savings : y.expenses;
+      const row = block.find(r => r.name === name);
+      return row ? row.months.slice() : new Array(12).fill(0);
+    }
+
+    // Legacy aliases (2024 data) for any stragglers that still reference them
+    const INCOME_BUDGET  = (BUDGETS_BY_YEAR['2024']?.income)   || [];
+    const EXPENSE_BUDGET = (BUDGETS_BY_YEAR['2024']?.expenses) || [];
+    const SAVINGS_BUDGET = (BUDGETS_BY_YEAR['2024']?.savings)  || [];
+
+    // Color assignment for categories
+    function colorFor(name, type) {
+      if (type === 'Income')   return 'sage';
+      if (type === 'Savings')  return 'blue';
+      // All expense categories share a single accent so the chips read as one group.
+      return 'terra';
+    }
+    function glyphFor(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
+    function tagFor(months) {
+      const nonzero = months.filter(m => m !== 0);
+      if (nonzero.length === 12 && nonzero.every(v => v === nonzero[0])) return 'fixed';
+      if (nonzero.length === 12) return 'monthly';
+      if (nonzero.length >= 9) return 'recurring';
+      return 'variable';
+    }
+    window.colorFor = colorFor;
+    window.glyphFor = glyphFor;
+    window.tagFor = tagFor;
+    window.YEAR = YEAR;
+    window.MONTHS = MONTHS;
+    window.MONTHS_LONG = MONTHS_LONG;
+    window.INCOME_BUDGET = INCOME_BUDGET;
+    window.EXPENSE_BUDGET = EXPENSE_BUDGET;
+    window.SAVINGS_BUDGET = SAVINGS_BUDGET;
+    window.BUDGETS_BY_YEAR = BUDGETS_BY_YEAR;
+    window.INCOME_CATS = INCOME_CATS;
+    window.EXPENSE_CATS = EXPENSE_CATS;
+    window.SAVINGS_CATS = SAVINGS_CATS;
+  
+})();
+</script>
+
+  <!-- ========================================================================
+       Persistence layer (DataStore)
+       Owns: file linking (File System Access API), auto-save, export/import,
+             user identity (for "last edited by"), first-run seeding.
+       ======================================================================== -->
+  <script>
+  (() => {
+    const FILE_NAME_DEFAULT = 'Budget Data.json';
+    const IDB_NAME = 'clements-budget';
+    const IDB_STORE = 'handles';
+    const IDB_KEY = 'fileHandle';
+    const LS_USER = 'clements-budget.user';
+    const SAVE_DEBOUNCE_MS = 600;
+
+    // --- IndexedDB helpers for persisting the FileSystemFileHandle across reloads
+    function openIdb() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbGet(key) {
+      const db = await openIdb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbSet(key, val) {
+      const db = await openIdb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(val, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+    async function idbDel(key) {
+      const db = await openIdb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    // --- Seed payload from the embedded JSON (only used on true first run)
+    function readEmbedded() {
+      let budgets = {};
+      let txs = [];
+      try {
+        const bEl = document.getElementById('imported-budgets');
+        if (bEl) budgets = JSON.parse(bEl.textContent.trim() || '{}');
+      } catch (e) { console.warn('embedded budgets parse failed', e); }
+      try {
+        const tEl = document.getElementById('imported-tx');
+        if (tEl) txs = JSON.parse(tEl.textContent.trim() || '[]');
+      } catch (e) { console.warn('embedded tx parse failed', e); }
+      // Strip any legacy ids from embedded tx so we control identity
+      txs = txs.map((t, i) => ({ ...t, id: t.id || 't' + i }));
+      return {
+        version: 1,
+        budgets,
+        txs,
+        meta: {
+          lastEditedBy: null,
+          lastEditedAt: null,
+          createdAt: new Date().toISOString()
+        }
+      };
+    }
+
+    // --- Normalize any loaded payload; backfills missing fields
+    function normalize(data) {
+      if (!data || typeof data !== 'object') return readEmbedded();
+      return {
+        version: data.version || 1,
+        budgets: data.budgets || {},
+        txs: (data.txs || []).map((t, i) => ({ ...t, id: t.id || 't' + i })),
+        meta: data.meta || { lastEditedBy: null, lastEditedAt: null, createdAt: new Date().toISOString() }
+      };
+    }
+
+    // --- File System Access support
+    const FS_SUPPORTED = typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+
+    async function verifyPermission(handle, readWrite) {
+      if (!handle) return false;
+      const opts = { mode: readWrite ? 'readwrite' : 'read' };
+      if ((await handle.queryPermission(opts)) === 'granted') return true;
+      if ((await handle.requestPermission(opts)) === 'granted') return true;
+      return false;
+    }
+
+    async function readHandle(handle) {
+      const file = await handle.getFile();
+      const text = await file.text();
+      try { return normalize(JSON.parse(text)); }
+      catch { return normalize(null); }
+    }
+
+    async function writeHandle(handle, payload) {
+      const w = await handle.createWritable();
+      await w.write(JSON.stringify(payload, null, 2));
+      await w.close();
+    }
+
+    // --- User identity (who is this browser)
+    function getUser() { return localStorage.getItem(LS_USER) || null; }
+    function setUser(name) { localStorage.setItem(LS_USER, name); }
+
+    // --- Pub/sub for status
+    const listeners = new Set();
+    function emit() { for (const l of listeners) l(DataStore.status()); }
+
+    let currentHandle = null;
+    let currentFileName = FILE_NAME_DEFAULT;
+    let currentPayload = null;
+    let saveState = 'idle'; // 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'unlinked'
+    let lastSavedAt = null;
+    let saveError = null;
+    let saveTimer = null;
+
+    const DataStore = {
+      FS_SUPPORTED,
+
+      getUser,
+      setUser,
+
+      subscribe(fn) { listeners.add(fn); fn(DataStore.status()); return () => listeners.delete(fn); },
+
+      status() {
+        return {
+          linked: !!currentHandle,
+          fileName: currentFileName,
+          saveState,
+          lastSavedAt,
+          saveError,
+          user: getUser(),
+          lastEditedBy: currentPayload?.meta?.lastEditedBy || null,
+          lastEditedAt: currentPayload?.meta?.lastEditedAt || null,
+          fsSupported: FS_SUPPORTED
+        };
+      },
+
+      // Initial load: try to restore a previously-linked handle from IndexedDB,
+      // else fall back to the embedded data (first run).
+      async init() {
+        if (FS_SUPPORTED) {
+          try {
+            const h = await idbGet(IDB_KEY);
+            if (h) {
+              // Permission may need a user gesture — query silently first
+              const ok = (await h.queryPermission({ mode: 'readwrite' })) === 'granted';
+              if (ok) {
+                currentHandle = h;
+                currentFileName = h.name || FILE_NAME_DEFAULT;
+                currentPayload = await readHandle(h);
+                saveState = 'saved';
+                lastSavedAt = new Date();
+                emit();
+                return currentPayload;
+              } else {
+                // Handle exists but needs permission; keep it and fall back to embedded for now.
+                // A "Reconnect" button in the UI will re-request permission on click.
+                currentHandle = h;
+                currentFileName = h.name || FILE_NAME_DEFAULT;
+                currentPayload = readEmbedded();
+                saveState = 'unlinked';
+                emit();
+                return currentPayload;
+              }
+            }
+          } catch (e) { console.warn('handle restore failed', e); }
+        }
+        currentPayload = readEmbedded();
+        saveState = 'unlinked';
+        emit();
+        return currentPayload;
+      },
+
+      // User gesture: pick a brand-new file location to save into
+      async linkNewFile() {
+        if (!FS_SUPPORTED) throw new Error('File System Access not supported in this browser.');
+        const handle = await window.showSaveFilePicker({
+          suggestedName: FILE_NAME_DEFAULT,
+          types: [{ description: 'Budget data', accept: { 'application/json': ['.json'] } }]
+        });
+        currentHandle = handle;
+        currentFileName = handle.name || FILE_NAME_DEFAULT;
+        await idbSet(IDB_KEY, handle);
+        // Write current payload immediately so the file has content
+        if (currentPayload) await writeHandle(handle, currentPayload);
+        saveState = 'saved';
+        lastSavedAt = new Date();
+        emit();
+      },
+
+      // User gesture: pick an existing data file to load from
+      async openExistingFile() {
+        if (!FS_SUPPORTED) throw new Error('File System Access not supported in this browser.');
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: 'Budget data', accept: { 'application/json': ['.json'] } }],
+          multiple: false
+        });
+        // Need readwrite so we can save back to it
+        const ok = await verifyPermission(handle, true);
+        if (!ok) throw new Error('Permission denied.');
+        currentHandle = handle;
+        currentFileName = handle.name || FILE_NAME_DEFAULT;
+        currentPayload = await readHandle(handle);
+        await idbSet(IDB_KEY, handle);
+        saveState = 'saved';
+        lastSavedAt = new Date();
+        emit();
+        return currentPayload;
+      },
+
+      // User gesture: re-grant permission for the previously-linked handle
+      async reconnect() {
+        if (!currentHandle) throw new Error('No file is linked.');
+        const ok = await verifyPermission(currentHandle, true);
+        if (!ok) throw new Error('Permission denied.');
+        currentPayload = await readHandle(currentHandle);
+        saveState = 'saved';
+        lastSavedAt = new Date();
+        emit();
+        return currentPayload;
+      },
+
+      // Forget the linked file (does not delete it)
+      async unlink() {
+        currentHandle = null;
+        await idbDel(IDB_KEY);
+        saveState = 'unlinked';
+        emit();
+      },
+
+      // App calls this on every data change. Debounced write.
+      async save(payload) {
+        currentPayload = {
+          version: 1,
+          budgets: payload.budgets,
+          txs: payload.txs,
+          meta: {
+            ...(currentPayload?.meta || {}),
+            lastEditedBy: getUser() || null,
+            lastEditedAt: new Date().toISOString(),
+            createdAt: currentPayload?.meta?.createdAt || new Date().toISOString()
+          }
+        };
+        saveState = currentHandle ? 'dirty' : 'unlinked';
+        emit();
+        if (!currentHandle) return; // nothing to persist to yet
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(async () => {
+          saveState = 'saving'; emit();
+          try {
+            await writeHandle(currentHandle, currentPayload);
+            saveState = 'saved';
+            lastSavedAt = new Date();
+            saveError = null;
+          } catch (e) {
+            saveState = 'error';
+            saveError = e.message || String(e);
+            console.error('save failed', e);
+          }
+          emit();
+        }, SAVE_DEBOUNCE_MS);
+      },
+
+      // Force-save immediately (Ctrl+S)
+      async saveNow() {
+        clearTimeout(saveTimer);
+        if (!currentHandle || !currentPayload) return;
+        saveState = 'saving'; emit();
+        try {
+          await writeHandle(currentHandle, currentPayload);
+          saveState = 'saved';
+          lastSavedAt = new Date();
+          saveError = null;
+        } catch (e) {
+          saveState = 'error';
+          saveError = e.message || String(e);
+        }
+        emit();
+      },
+
+      // Fallback: download JSON file
+      exportDownload() {
+        const payload = currentPayload || readEmbedded();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = currentFileName || FILE_NAME_DEFAULT;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      },
+
+      // Fallback: import JSON file via <input type=file>
+      async importFile(file) {
+        const text = await file.text();
+        currentPayload = normalize(JSON.parse(text));
+        saveState = currentHandle ? 'dirty' : 'unlinked';
+        emit();
+        return currentPayload;
+      },
+
+      getPayload() { return currentPayload; }
+    };
+
+    window.DataStore = DataStore;
+  })();
+  </script>
+
+  <script type="text/babel-pending" data-presets="react">
+/*__IIFE_WRAPPED__*/ (() => {
+
+    // ---------- helpers ----------
+    const ACCENTS = {
+      sage:   { bg: 'var(--sage-soft)',  fg: 'var(--sage-ink)',  bar: 'var(--sage)' },
+      terra:  { bg: 'var(--terra-soft)', fg: 'var(--terra-ink)', bar: 'var(--terracotta)' },
+      blue:   { bg: 'var(--blue-soft)',  fg: 'var(--blue-ink)',  bar: 'var(--blue)' },
+      amber:  { bg: 'var(--amber-soft)', fg: 'var(--amber-ink)', bar: 'var(--amber)' },
+      plum:   { bg: 'var(--plum-soft)',  fg: 'var(--plum-ink)',  bar: 'var(--plum)' }
+    };
+    const fmt = (n) => {
+      const neg = n < 0;
+      const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      return (neg ? '−' : '') + '$' + s;
+    };
+    const fmtCents = (n) => {
+      const neg = n < 0;
+      const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return (neg ? '−' : '') + '$' + s;
+    };
+    const fmtSigned = (n) => (n >= 0 ? '+' : '−') + '$' + Math.abs(n).toLocaleString('en-US', {maximumFractionDigits:0});
+
+    // ---------- small components ----------
+    var Bar = function({ value, budget, accent, rowType }) {
+      const pct = budget > 0 ? Math.min(150, (value/budget)*100) : (value > 0 ? 150 : 0);
+      const over = value > budget && budget > 0;
+      // Color by utilization so rows read at a glance instead of all being the same accent.
+      // Expenses: under is good (sage), mid is amber, over is terracotta.
+      // Income/Savings: meeting or exceeding target is good (sage), behind is amber, way behind is muted.
+      let barColor;
+      if (rowType === 'Expenses') {
+        if (budget === 0)          barColor = value > 0 ? 'var(--terracotta)' : 'var(--ink-4, #c9c4b8)';
+        else if (pct >= 100)       barColor = 'var(--terracotta)';
+        else if (pct >= 85)        barColor = 'var(--amber, #d9a441)';
+        else if (pct >= 50)        barColor = 'var(--sage)';
+        else                       barColor = 'var(--blue)';
+      } else {
+        // Income / Savings — higher-is-better
+        if (budget === 0)          barColor = value > 0 ? 'var(--sage)' : 'var(--ink-4, #c9c4b8)';
+        else if (pct >= 100)       barColor = 'var(--sage)';
+        else if (pct >= 75)        barColor = 'var(--blue)';
+        else if (pct >= 40)        barColor = 'var(--amber, #d9a441)';
+        else                       barColor = 'var(--terracotta)';
+      }
+      return (
+        <div className="bar-wrap">
+          <div className="bar-track"><div className="bar-fill" style={{width: Math.min(100,pct)+'%', background: barColor}}/></div>
+          <span className="bar-pct num">{Math.round(pct)}%</span>
+        </div>
+      );
+    }
+
+    var Donut = function({ slices, size=110, thickness=15 }) {
+      const total = slices.reduce((a,b)=>a+b.value,0) || 1;
+      const r = (size - thickness) / 2;
+      const c = size/2;
+      const circ = 2*Math.PI*r;
+      let offset = 0;
+      return (
+        <svg className="donut" viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={c} cy={c} r={r} fill="none" stroke="var(--bg-soft)" strokeWidth={thickness}/>
+          {slices.map((s,i)=>{
+            const len = (s.value/total) * circ - 2;
+            const dash = `${Math.max(0,len)} ${circ - Math.max(0,len)}`;
+            const el = (
+              <circle key={i} cx={c} cy={c} r={r} fill="none" stroke={s.color}
+                strokeWidth={thickness} strokeDasharray={dash}
+                strokeDashoffset={-offset} transform={`rotate(-90 ${c} ${c})`}/>
+            );
+            offset += (s.value/total)*circ;
+            return el;
+          })}
+          <text x={c} y={c-2} textAnchor="middle" dominantBaseline="middle" fontSize="20">{Math.round((slices[0].value/total)*100)}%</text>
+          <text className="caption" x={c} y={c+16} textAnchor="middle" dominantBaseline="middle">SAVED</text>
+        </svg>
+      );
+    }
+
+    var Spark = function({ data, color="var(--sage)" }) {
+      const w = 300, h = 64, pad = 4;
+      const min = Math.min(...data), max = Math.max(...data);
+      const rng = max - min || 1;
+      const pts = data.map((v,i)=>{
+        const x = pad + (i/(Math.max(1,data.length-1)))*(w-pad*2);
+        const y = pad + (1 - (v-min)/rng)*(h-pad*2);
+        return [x,y];
+      });
+      const path = pts.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+      const area = path + ` L ${pts[pts.length-1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
+      return (
+        <svg className="spark" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+          <path d={area} fill={color} opacity="0.12"/>
+          <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        </svg>
+      );
+    }
+
+    var AllocationStrip = function({ totals, view, year, monthName }) {
+      const leftB = totals.toAllocateA;
+      const overAllocated = leftB < -0.5;
+      const underAllocated = leftB > 0.5;
+      const tone = overAllocated ? 'over' : underAllocated ? 'under' : 'ok';
+      const label = overAllocated ? 'over-allocated' : underAllocated ? 'left to allocate' : 'fully allocated';
+      const periodLabel = view === 'month' ? monthName : view === 'year' ? year : 'all time';
+
+      return (
+        <div className="alloc-strip">
+          <span className="alloc-period">{periodLabel}</span>
+          <span className="alloc-sep">·</span>
+          <span className="alloc-label">{label}</span>
+          <span className={"alloc-amount num " + tone}>{leftB < 0 ? '−' : ''}{fmt(Math.abs(leftB))}</span>
+        </div>
+      );
+    }
+
+    var FactCard = function({ txs }) {
+      const { useMemo, useState, useEffect } = React;
+
+      // Compute a bank of facts from the tx data. Each returns {icon, title, body} or null if not applicable.
+      const facts = useMemo(() => {
+        if (!txs.length) return [];
+        const out = [];
+        const inc = txs.filter(t => t.type === 'Income');
+        const exp = txs.filter(t => t.type === 'Expenses');
+        const sav = txs.filter(t => t.type === 'Savings');
+        const totalInc = inc.reduce((a,b)=>a+b.amount, 0);
+        const totalExp = exp.reduce((a,b)=>a+b.amount, 0);
+        const totalSav = sav.reduce((a,b)=>a+b.amount, 0);
+
+        // 1. Total transactions
+        out.push({
+          icon: '📋',
+          title: 'Grand total',
+          body: `You've logged ${txs.length.toLocaleString()} transactions, moving ${fmt(totalInc + totalExp + totalSav)} through this budget all-time.`
+        });
+
+        // 2. Lifetime income
+        out.push({
+          icon: '💵',
+          title: 'Lifetime income',
+          body: `You've earned ${fmt(totalInc)} since you started tracking.`
+        });
+
+        // 3. Biggest expense category (all time)
+        const expByCat = {};
+        for (const t of exp) expByCat[t.category] = (expByCat[t.category]||0) + t.amount;
+        const topExp = Object.entries(expByCat).sort((a,b)=>b[1]-a[1])[0];
+        if (topExp) {
+          out.push({
+            icon: '🏆',
+            title: 'Top spending category',
+            body: `${topExp[0]} has cost you ${fmt(topExp[1])} over the years — that's ${(topExp[1]/totalExp*100).toFixed(0)}% of everything you've spent.`
+          });
+        }
+
+        // 4. Biggest single transaction
+        const topTx = [...txs].sort((a,b)=>b.amount-a.amount)[0];
+        if (topTx) {
+          out.push({
+            icon: '💎',
+            title: 'Largest transaction',
+            body: `Your biggest single entry: ${fmt(topTx.amount)} for ${topTx.category} on ${topTx.date}.`
+          });
+        }
+
+        // 5. Best savings month (highest inc-exp)
+        const months = {};
+        for (const t of txs) {
+          const m = t.date.slice(0,7);
+          if (!months[m]) months[m] = {inc:0, exp:0};
+          if (t.type === 'Income') months[m].inc += t.amount;
+          else if (t.type === 'Expenses') months[m].exp += t.amount;
+        }
+        const monthArr = Object.entries(months).map(([m,v])=>({m, net: v.inc-v.exp, ...v}));
+        const bestMonth = monthArr.filter(m=>m.inc>0).sort((a,b)=>b.net-a.net)[0];
+        if (bestMonth) {
+          const [y, mo] = bestMonth.m.split('-');
+          const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(mo)-1];
+          out.push({
+            icon: '🌟',
+            title: 'Best savings month',
+            body: `${monthName} ${y} was your best — you kept ${fmt(bestMonth.net)} after expenses.`
+          });
+        }
+
+        // 6. Worst overspend month
+        const worstMonth = monthArr.filter(m=>m.inc>0 || m.exp>0).sort((a,b)=>a.net-b.net)[0];
+        if (worstMonth && worstMonth.net < 0) {
+          const [y, mo] = worstMonth.m.split('-');
+          const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1];
+          out.push({
+            icon: '⚠️',
+            title: 'Toughest month',
+            body: `${monthName} ${y} was your roughest — expenses outpaced income by ${fmt(Math.abs(worstMonth.net))}.`
+          });
+        }
+
+        // 7. Average per month
+        const activeMonths = monthArr.filter(m=>m.inc>0 || m.exp>0).length;
+        if (activeMonths > 0) {
+          out.push({
+            icon: '📅',
+            title: 'Monthly average',
+            body: `You average ${fmt(totalInc/activeMonths)} in and ${fmt(totalExp/activeMonths)} out per month across ${activeMonths} tracked months.`
+          });
+        }
+
+        // 8. Savings to date
+        if (totalSav > 0) {
+          out.push({
+            icon: '🏦',
+            title: 'Put away',
+            body: `You've moved ${fmt(totalSav)} into savings & goals since you started tracking.`
+          });
+        }
+
+        // 9. Coffee / small habit fact
+        const coffeeCats = ['Starbucks', 'Coffee', 'Dining'];
+        const coffeeTotal = exp.filter(t=>coffeeCats.includes(t.category)).reduce((a,b)=>a+b.amount, 0);
+        if (coffeeTotal > 50) {
+          out.push({
+            icon: '☕',
+            title: 'Small sips add up',
+            body: `${fmt(coffeeTotal)} has gone to coffee and dining — small purchases compound.`
+          });
+        }
+
+        // 10. Savings rate overall
+        const sr = totalInc > 0 ? (totalInc - totalExp) / totalInc * 100 : 0;
+        out.push({
+          icon: '📈',
+          title: 'Lifetime savings rate',
+          body: `Across everything you've tracked, ${sr.toFixed(0)}% of income didn't get spent.`
+        });
+
+        // 11. Most active category
+        const catCounts = {};
+        for (const t of txs) catCounts[t.category] = (catCounts[t.category]||0) + 1;
+        const topCount = Object.entries(catCounts).sort((a,b)=>b[1]-a[1])[0];
+        if (topCount) {
+          out.push({
+            icon: '🔁',
+            title: 'Most frequent category',
+            body: `${topCount[0]} shows up ${topCount[1]} times — your most-logged category.`
+          });
+        }
+
+        // 12. Recent streak
+        const dates = [...new Set(txs.map(t=>t.date))].sort();
+        if (dates.length > 1) {
+          const first = dates[0], last = dates[dates.length-1];
+          const days = Math.round((new Date(last) - new Date(first)) / (1000*60*60*24));
+          out.push({
+            icon: '⏱️',
+            title: 'Tracking streak',
+            body: `${days.toLocaleString()} days between your first and most recent transaction. That's dedication.`
+          });
+        }
+
+        return out;
+      }, [txs]);
+
+      // Rotate every 10 minutes, starting from a seed based on the current 10-min window.
+      const [, force] = useState(0);
+      useEffect(() => {
+        const id = setInterval(() => force(n => n+1), 60 * 1000); // re-check every minute
+        return () => clearInterval(id);
+      }, []);
+
+      if (!facts.length) return null;
+      const windowIdx = Math.floor(Date.now() / (10 * 60 * 1000));
+      const fact = facts[windowIdx % facts.length];
+
+      return (
+        <div className="fact-card">
+          <div className="fact-icon">{fact.icon}</div>
+          <div className="fact-body">
+            <div className="fact-title">Did you know · {fact.title}</div>
+            <div className="fact-text">{fact.body}</div>
+          </div>
+          <div className="fact-hint">rotates every 10 min</div>
+        </div>
+      );
+    }
+
+    // Subtle "last saved by X · 2 min ago" indicator that appears next
+    // to the transaction count after any save. Hooks into window.__subscribeLastEdited
+    // which is set up by supabase-client.js.
+    var LastEditedBy = function() {
+      const { useState, useEffect } = React;
+      const [state, setState] = useState({ at: null, by: null });
+      useEffect(() => {
+        if (!window.__subscribeLastEdited) return;
+        return window.__subscribeLastEdited(setState);
+      }, []);
+      if (!state.at) return null;
+      const mins = Math.floor((Date.now() - state.at.getTime()) / 60000);
+      const rel = mins < 1 ? 'just now'
+                : mins === 1 ? '1 min ago'
+                : mins < 60 ? mins + ' min ago'
+                : mins < 120 ? '1 hr ago'
+                : Math.floor(mins/60) + ' hr ago';
+      return (
+        <span style={{color:'var(--ink-3)', marginLeft: 8, opacity: 0.75}}>
+          · saved by {state.by}, {rel}
+        </span>
+      );
+    }
+
+    Object.assign(window, { Bar, Donut, Spark, AllocationStrip, FactCard, LastEditedBy, ACCENTS, fmt, fmtCents, fmtSigned });
+  
+})();
+</script>
+
+  <script type="text/babel-pending" data-presets="react">
+/*__IIFE_WRAPPED__*/ (() => {
+
+    // Transactions — embedded from xlsx (category totals shown; full tx list has 589 rows, sample shown below)
+    // We'll embed a compacted list. For this build we include the ones parsed.
+    const IMPORTED_TX = [];  // populated by loader below
+  
+})();
+</script>
+
+  <script id="imported-budgets" type="application/json">{}</script>
+
+  <script id="imported-tx" type="application/json">[]</script>
+
+  <script type="text/babel-pending" data-presets="react">
+/*__IIFE_WRAPPED__*/ (() => {
+
+    var TxModal = function({ open, onClose, onSave, categories, defaultDate }) {
+      const { useState, useEffect } = React;
+      const [form, setForm] = useState({
+        date: defaultDate, type: 'Expenses', category: categories.Expenses[0] || '', amount: '', details: ''
+      });
+      useEffect(()=>{
+        if (open) setForm(f => ({...f, date: defaultDate, category: categories[f.type]?.[0] || ''}));
+      }, [open, defaultDate]);
+      if (!open) return null;
+      const submit = () => {
+        const amt = parseFloat(form.amount);
+        if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
+        if (!form.category) { alert('Pick a category'); return; }
+        onSave({...form, amount: amt, id: 't' + Date.now()});
+        onClose();
+      };
+      return (
+        <div className="modal-back" onClick={onClose}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3 className="serif">Add transaction</h3>
+            <div className="modal-row-2">
+              <div className="modal-row">
+                <label>Date</label>
+                <input type="date" value={form.date} onChange={e=>setForm({...form, date: e.target.value})}/>
+              </div>
+              <div className="modal-row">
+                <label>Type</label>
+                <select value={form.type} onChange={e=>setForm({...form, type: e.target.value, category: categories[e.target.value]?.[0] || ''})}>
+                  <option>Income</option>
+                  <option>Expenses</option>
+                  <option>Savings</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-row">
+              <label>Category</label>
+              <select value={form.category} onChange={e=>setForm({...form, category: e.target.value})}>
+                {(categories[form.type] || []).map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="modal-row-2">
+              <div className="modal-row">
+                <label>Amount</label>
+                <input type="number" step="0.01" placeholder="0.00" value={form.amount}
+                  onChange={e=>setForm({...form, amount: e.target.value})}
+                  onKeyDown={e => e.key==='Enter' && submit()} autoFocus/>
+              </div>
+              <div className="modal-row">
+                <label>Details <span style={{opacity:0.6, textTransform:'none', letterSpacing:0, fontSize:10}}>(optional)</span></label>
+                <input type="text" placeholder="e.g. Trader Joes" value={form.details}
+                  onChange={e=>setForm({...form, details: e.target.value})}
+                  onKeyDown={e => e.key==='Enter' && submit()}/>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={submit}>Add transaction</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    window.TxModal = TxModal;
+  
+})();
+</script>
+
+
+  <script type="text/babel-pending" data-presets="react">
+/*__IIFE_WRAPPED__*/ (() => {
+
+    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, LastEditedBy,
+            colorFor, glyphFor, tagFor, YEAR, MONTHS, MONTHS_LONG,
+            INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
+            BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
+    const TWEAK_DEFAULTS = window.TWEAK_DEFAULTS || { theme: 'warm' };
+    const { useState, useMemo, useEffect } = React;
+
+    function Row({ row, monthIdx, view, budget, onEdit }) {
+      const acc = ACCENTS[row.color];
+      const actual = row.actual || 0;
+      const isIncome = row.type === 'Income';
+      const variance = isIncome ? actual - budget : budget - actual; // positive = good
+      const isBad = variance < 0 && budget > 0;
+      const editable = view === 'month';
+      return (
+        <tr>
+          <td>
+            <div className="cat-cell">
+              <span className="cat-chip" style={{background: acc.bg, color: acc.fg}}>{row.glyph}</span>
+              <div>
+                <div className="cat-name">{row.name}</div>
+                <div className="cat-tag">{row.tag}</div>
+              </div>
+            </div>
+          </td>
+          <td className="num" style={{textAlign:'right'}}>
+            {editable ? (
+              <input className="editable num" type="text" value={budget}
+                onChange={(e)=>{
+                  const v = parseFloat(e.target.value.replace(/[^0-9.-]/g,''))||0;
+                  onEdit(row.key, monthIdx, v);
+                }}/>
+            ) : (
+              <span style={{color:'var(--ink-2)'}}>{fmt(budget)}</span>
+            )}
+          </td>
+          <td className="num" style={{textAlign:'right'}}>{fmt(actual)}</td>
+          <td className="num" style={{textAlign:'right', color: isBad ? 'var(--terra-ink)' : 'var(--ink-2)'}}>
+            {isBad ? '−' : ''}{fmt(Math.abs(variance)).replace('−','')}
+          </td>
+          <td className="bar-cell"><Bar value={actual} budget={budget} accent={row.color} rowType={row.type}/></td>
+        </tr>
+      );
+    }
+
+    function GroupHeader({ label, right }) {
+      return (
+        <tr className="row-group">
+          <td colSpan="4">{label}</td>
+          <td style={{textAlign:'right'}}>{right}</td>
+        </tr>
+      );
+    }
+    function SubtotalRow({ label, budget, actual, accent, kind }) {
+      // For Income: earning more than planned is GOOD — treat it as positive variance.
+      // For Expenses/Savings: spending/saving less than planned leaves money "remaining" (positive).
+      const isIncome = kind === 'Income';
+      const variance = isIncome ? actual - budget : budget - actual;     // signed: positive = good
+      const isBad = variance < 0 && budget > 0;                          // income short OR over-budget
+      return (
+        <tr className="subtotal-row">
+          <td style={{paddingLeft: 56}}>{label} subtotal</td>
+          <td className="num" style={{textAlign:'right'}}>{fmt(budget)}</td>
+          <td className="num" style={{textAlign:'right'}}>{fmt(actual)}</td>
+          <td className="num" style={{textAlign:'right', color: isBad ? 'var(--terra-ink)' : 'var(--ink-2)'}}>
+            {isBad ? '−' : ''}{fmt(Math.abs(variance)).replace('−','')}
+          </td>
+          <td className="bar-cell"><Bar value={actual} budget={budget} accent={accent} rowType={label}/></td>
+        </tr>
+      );
+    }
+
+    function App() {
+      // Pull whatever DataStore.init() loaded (file → else embedded seed) as starting state.
+      const initialPayload = (window.DataStore && window.DataStore.getPayload()) || { budgets: BUDGETS_BY_YEAR, txs: [] };
+
+      // per-year budgets, mutable so user edits persist in-session
+      const [budgetsByYear, setBudgetsByYear] = useState(() => {
+        // deep copy so edits don't mutate the module-level object
+        const source = initialPayload.budgets || BUDGETS_BY_YEAR;
+        const out = {};
+        for (const [y, blocks] of Object.entries(source)) {
+          out[y] = {
+            income:   (blocks.income   || []).map(r => ({name:r.name, months:r.months.slice()})),
+            expenses: (blocks.expenses || []).map(r => ({name:r.name, months:r.months.slice()})),
+            savings:  (blocks.savings  || []).map(r => ({name:r.name, months:r.months.slice()}))
+          };
+        }
+        return out;
+      });
+      // helper to fetch or fabricate a year block (fills zeros for years without budgets)
+      const blockFor = (y) => {
+        if (budgetsByYear[y]) return budgetsByYear[y];
+        return {
+          income:   INCOME_CATS.map(n  => ({name:n, months:new Array(12).fill(0)})),
+          expenses: EXPENSE_CATS.map(n => ({name:n, months:new Array(12).fill(0)})),
+          savings:  SAVINGS_CATS.map(n => ({name:n, months:new Array(12).fill(0)}))
+        };
+      };
+
+      // transactions — load from embedded JSON script tag
+      const [txs, setTxs] = useState(() => {
+        try {
+          const el = document.getElementById('imported-tx');
+          const data = JSON.parse(el.textContent.trim() || '[]');
+          return data.map((t,i) => ({...t, id: t.id || 'i' + i}));
+        } catch(e) { return []; }
+      });
+
+      // Expose state setters to supabase-client.js so it can apply
+      // realtime updates from the other user. See the Realtime section
+      // of supabase-client.js for the event handlers that call these.
+      useEffect(() => {
+        window.__reactBridge = {
+          setTxs,
+          setBudgetsByYear,
+          // Category list extension (matches the local logic in addCategory)
+          extendCategoryLists: (type, name) => {
+            if (type === 'Income'   && !INCOME_CATS.includes(name))  INCOME_CATS.push(name);
+            if (type === 'Expenses' && !EXPENSE_CATS.includes(name)) EXPENSE_CATS.push(name);
+            if (type === 'Savings'  && !SAVINGS_CATS.includes(name)) SAVINGS_CATS.push(name);
+          }
+        };
+        // Signal to supabase-client that React is ready for realtime
+        if (window.__onReactReady) window.__onReactReady();
+        return () => { window.__reactBridge = null; };
+      }, []);
+
+      // Derive available years from transactions
+      const years = useMemo(() => {
+        const s = new Set(txs.map(t => parseInt(t.date.slice(0,4))).filter(y => !isNaN(y)));
+        return [...s].sort();
+      }, [txs]);
+
+      const [year, setYear] = useState(() => {
+        const s = new Set(txs.map(t => parseInt(t.date.slice(0,4))).filter(y => !isNaN(y)));
+        const ys = [...s].sort();
+        return ys[ys.length-1] || YEAR; // latest year with data
+      });
+      const [monthIdx, setMonthIdx] = useState(() => {
+        // default to last month of data in the selected year
+        const latestYear = Math.max(...txs.map(t => parseInt(t.date.slice(0,4))).filter(y=>!isNaN(y)), YEAR);
+        const inYear = txs.filter(t => parseInt(t.date.slice(0,4)) === latestYear);
+        if (inYear.length === 0) return 0;
+        return Math.max(...inYear.map(t => parseInt(t.date.slice(5,7))-1));
+      });
+      const [view, setView] = useState('month'); // 'month' | 'year' | 'all'
+      const [tab, setTab] = useState('all');
+
+      // Derived: budget rows for the currently-selected year (stable type order: Income → Expenses → Savings)
+      const budgetRows = useMemo(() => {
+        const block = blockFor(year);
+        const mk = (rows, type) => rows.map((r, i) => ({
+          key: type + '-' + i,
+          name: r.name,
+          type,
+          color: colorFor(r.name, type),
+          glyph: glyphFor(r.name),
+          tag: tagFor(r.months),
+          months: r.months.slice()
+        }));
+        return [
+          ...mk(block.income,   'Income'),
+          ...mk(block.expenses, 'Expenses'),
+          ...mk(block.savings,  'Savings')
+        ];
+      }, [budgetsByYear, year]);
+      const [modalOpen, setModalOpen] = useState(false);
+      const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
+      const [tweaksOpen, setTweaksOpen] = useState(false);
+      const [txFilter, setTxFilter] = useState({q: '', type: 'all', month: 'current'});
+      const [addingTo, setAddingTo] = useState(null); // 'Income' | 'Expenses' | 'Savings' | null
+      const [newCatName, setNewCatName] = useState('');
+      const [txLimit, setTxLimit] = useState(200);
+      // Reset pagination when the filtered set changes
+      useEffect(()=>{ setTxLimit(200); }, [txFilter, view, monthIdx, year]);
+      const [showHiddenFor, setShowHiddenFor] = useState(() => new Set()); // group keys where hidden rows are revealed
+      const toggleShownFor = (k) => setShowHiddenFor(prev => {
+        const next = new Set(prev);
+        if (next.has(k)) next.delete(k); else next.add(k);
+        return next;
+      });
+
+      useEffect(()=>{
+        document.body.className = 'theme-' + tweaks.theme;
+      }, [tweaks]);
+
+      useEffect(()=>{
+        const handler = (e) => {
+          if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
+          if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
+        };
+        window.addEventListener('message', handler);
+        window.parent.postMessage({type: '__edit_mode_available'}, '*');
+        return ()=>window.removeEventListener('message', handler);
+      }, []);
+      const setTweak = (k, v) => {
+        const next = {...tweaks, [k]: v};
+        setTweaks(next);
+        window.parent.postMessage({type: '__edit_mode_set_keys', edits: {[k]: v}}, '*');
+      };
+
+      // categories list for modal
+      const categoriesByType = useMemo(()=>{
+        const out = { Income: [], Expenses: [], Savings: [] };
+        for (const r of budgetRows) out[r.type].push(r.name);
+        return out;
+      }, [budgetRows]);
+
+      // actuals per category based on current view (month / year / all)
+      const actualsByCat = useMemo(()=>{
+        const map = {};
+        let prefix = null;
+        if (view === 'month') prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
+        else if (view === 'year') prefix = year + '-';
+        // view === 'all' → no prefix, include everything
+        for (const t of txs) {
+          if (prefix && !t.date.startsWith(prefix)) continue;
+          const key = t.type + '|' + t.category;
+          map[key] = (map[key] || 0) + t.amount;
+        }
+        return map;;
+      }, [txs, monthIdx, year, view]);
+
+      // attach actuals
+      const decoratedRows = budgetRows.map(r => ({...r, actual: actualsByCat[r.type + '|' + r.name] || 0}));
+
+      // Budget totals for the "all time" view — summed across EVERY year in budgetsByYear,
+      // so each row shows its lifetime budget (not a simplistic single-year × N).
+      const allTimeBudgetByCat = useMemo(() => {
+        const map = {}; // key: `${type}|${name}` → 12-month array summed across years
+        for (const yr of Object.keys(budgetsByYear)) {
+          const block = budgetsByYear[yr];
+          const addBlock = (rows, type) => {
+            for (const r of rows) {
+              const k = type + '|' + r.name;
+              if (!map[k]) map[k] = new Array(12).fill(0);
+              for (let i = 0; i < 12; i++) map[k][i] += (r.months[i] || 0);
+            }
+          };
+          addBlock(block.income,   'Income');
+          addBlock(block.expenses, 'Expenses');
+          addBlock(block.savings,  'Savings');
+        }
+        return map;
+      }, [budgetsByYear]);
+
+      // groups — budget depends on view
+      const budgetForRow = (r) => {
+        if (view === 'month') return r.months[monthIdx] || 0;
+        if (view === 'year') return r.months.reduce((a,b)=>a+b, 0);
+        // all time: sum that category across every year
+        const arr = allTimeBudgetByCat[r.type + '|' + r.name];
+        return arr ? arr.reduce((a,b)=>a+b, 0) : 0;
+      };
+      const groups = [
+        { key: 'Income',   label: 'Income',          accent: 'sage',  rows: decoratedRows.filter(r=>r.type==='Income') },
+        { key: 'Expenses', label: 'Expenses',        accent: 'terra', rows: decoratedRows.filter(r=>r.type==='Expenses') },
+        { key: 'Savings',  label: 'Savings & goals', accent: 'blue',  rows: decoratedRows.filter(r=>r.type==='Savings') }
+      ].map(g => {
+        // Hide rows that have no activity and no budget in the current view (unless user toggled "show all" for this group).
+        const visibleRows = showHiddenFor.has(g.key)
+          ? g.rows
+          : g.rows.filter(r => (r.actual || 0) > 0 || budgetForRow(r) > 0);
+        return {
+          ...g,
+          rows: [...visibleRows].sort((a,b) => (b.actual || 0) - (a.actual || 0)),
+          hiddenCount: g.rows.length - visibleRows.length,
+          // Subtotals always include ALL rows so numbers don't change as rows hide/show.
+          budget: g.rows.reduce((a,b)=>a+budgetForRow(b),0),
+          actual: g.rows.reduce((a,b)=>a+b.actual,0)
+        };
+      });
+
+      const totals = {
+        incB: groups[0].budget, incA: groups[0].actual,
+        expB: groups[1].budget, expA: groups[1].actual,
+        savB: groups[2].budget, savA: groups[2].actual
+      };
+      totals.netA = totals.incA - totals.expA;
+      totals.netB = totals.incB - totals.expB;
+      totals.savingsRate = totals.incA > 0 ? (totals.incA - totals.expA) / totals.incA : 0;
+      // Left to allocate: income minus everything planned (expenses + savings goals).
+      // Positive = you still have income to assign. Negative = you've over-allocated.
+      totals.toAllocateB = totals.incB - totals.expB - totals.savB; // planned basis
+      totals.toAllocateA = totals.incA - totals.expA - totals.savA; // actual basis
+
+      // history — per-month totals for the selected year
+      const history = useMemo(()=>{
+        const inc = Array(12).fill(0), exp = Array(12).fill(0), sav = Array(12).fill(0);
+        for (const t of txs) {
+          if (!t.date.startsWith(year+'-')) continue;
+          const m = parseInt(t.date.slice(5,7)) - 1;
+          if (t.type === 'Income') inc[m] += t.amount;
+          else if (t.type === 'Expenses') exp[m] += t.amount;
+          else if (t.type === 'Savings') sav[m] += t.amount;
+        }
+        return { inc, exp, sav, net: inc.map((v,i)=>v-exp[i]) };
+      }, [txs, year]);
+
+      // yearly history — per-year totals across all data
+      const yearlyHistory = useMemo(()=>{
+        const m = {};
+        for (const t of txs) {
+          const y = parseInt(t.date.slice(0,4));
+          if (isNaN(y)) continue;
+          if (!m[y]) m[y] = { inc:0, exp:0, sav:0 };
+          if (t.type === 'Income') m[y].inc += t.amount;
+          else if (t.type === 'Expenses') m[y].exp += t.amount;
+          else if (t.type === 'Savings') m[y].sav += t.amount;
+        }
+        return years.map(y => ({ year: y, ...m[y], net: m[y].inc - m[y].exp }));
+      }, [txs, years]);
+
+      // edit budget cell — optimistic local update, then persist to Supabase.
+      // On failure, reload to recover the truth from the server.
+      const editBudget = (key, mIdx, value) => {
+        // key looks like "Income-0" / "Expenses-4" / "Savings-2"
+        const dash = key.indexOf('-');
+        const type = key.slice(0, dash);
+        const rowIdx = parseInt(key.slice(dash + 1));
+        const blockKey = type === 'Income' ? 'income' : type === 'Savings' ? 'savings' : 'expenses';
+
+        // Capture the category name BEFORE the state update (we need it for the write)
+        const yKey = String(year);
+        const existingBlock = budgetsByYear[yKey]?.[blockKey] || [];
+        const categoryName = existingBlock[rowIdx]?.name
+                          || (type === 'Income' ? INCOME_CATS[rowIdx]
+                            : type === 'Savings' ? SAVINGS_CATS[rowIdx]
+                            : EXPENSE_CATS[rowIdx]);
+
+        setBudgetsByYear(prev => {
+          const base = prev[yKey] || {
+            income:   INCOME_CATS.map(n  => ({name:n, months:new Array(12).fill(0)})),
+            expenses: EXPENSE_CATS.map(n => ({name:n, months:new Array(12).fill(0)})),
+            savings:  SAVINGS_CATS.map(n => ({name:n, months:new Array(12).fill(0)}))
+          };
+          const nextBlock = {
+            income:   base.income.map(r   => ({name:r.name, months:r.months.slice()})),
+            expenses: base.expenses.map(r => ({name:r.name, months:r.months.slice()})),
+            savings:  base.savings.map(r  => ({name:r.name, months:r.months.slice()}))
+          };
+          if (nextBlock[blockKey][rowIdx]) {
+            nextBlock[blockKey][rowIdx].months[mIdx] = value;
+          }
+          return { ...prev, [yKey]: nextBlock };
+        });
+
+        // Persist to Supabase. Month is 1-12 in the DB, mIdx is 0-11.
+        if (window.__SupaStore && categoryName) {
+          window.__SupaStore.editBudget({
+            type, categoryName,
+            year: year,
+            month: mIdx + 1,
+            amount: value
+          }).catch(err => {
+            console.error('Save failed, reloading:', err);
+            alert('Save failed: ' + err.message + '\n\nReloading to restore accurate data.');
+            location.reload();
+          });
+        }
+      };
+      const addTx = (tx) => {
+        // Optimistic insert with temp id, then swap in real UUID once saved
+        setTxs(prev => [...prev, tx]);
+        const y = parseInt(tx.date.slice(0,4));
+        const m = parseInt(tx.date.slice(5,7)) - 1;
+        if (!isNaN(y)) setYear(y);
+        if (m >= 0 && m < 12) setMonthIdx(m);
+        setView('month');
+
+        if (window.__SupaStore) {
+          window.__SupaStore.addTx({
+            date: tx.date,
+            type: tx.type,
+            categoryName: tx.category,
+            amount: tx.amount,
+            details: tx.details || ''
+          }).then(realId => {
+            // Swap the temp id for the real UUID so future deletes target the right row
+            setTxs(prev => prev.map(t => t.id === tx.id ? { ...t, id: realId } : t));
+          }).catch(err => {
+            console.error('Add failed, rolling back:', err);
+            setTxs(prev => prev.filter(t => t.id !== tx.id));
+            alert('Save failed: ' + err.message);
+          });
+        }
+      };
+      const deleteTx = (id) => {
+        if (!confirm('Delete this transaction?')) return;
+        // Save a snapshot in case we need to roll back
+        const snapshot = txs.find(t => t.id === id);
+        setTxs(prev => prev.filter(t => t.id !== id));
+
+        if (window.__SupaStore) {
+          window.__SupaStore.deleteTx(id).catch(err => {
+            console.error('Delete failed, restoring:', err);
+            if (snapshot) setTxs(prev => [...prev, snapshot]);
+            alert('Delete failed: ' + err.message);
+          });
+        }
+      };
+
+      // Add a new category. Appended to every year's block (with zero budgets)
+      // so it shows up consistently regardless of which year is selected.
+      const addCategory = (type, name) => {
+        const clean = (name || '').trim();
+        if (!clean) return;
+        const blockKey = type === 'Income' ? 'income' : type === 'Savings' ? 'savings' : 'expenses';
+        // check uniqueness in current year block
+        const existing = (budgetsByYear[String(year)]?.[blockKey] || []).some(r => r.name.toLowerCase() === clean.toLowerCase());
+        if (existing) { alert('A category named "' + clean + '" already exists in ' + type + '.'); return; }
+
+        // Persist to Supabase first so that subsequent budget edits on this
+        // category can resolve its id (they look it up by name).
+        const persist = window.__SupaStore
+          ? window.__SupaStore.addCategory({ type, name: clean })
+          : Promise.resolve();
+
+        persist.then(() => {
+          setBudgetsByYear(prev => {
+            const next = {};
+            const allYears = new Set([...Object.keys(prev), String(year)]);
+            for (const y of allYears) {
+              const base = prev[y] || {
+                income:   INCOME_CATS.map(n  => ({name:n, months:new Array(12).fill(0)})),
+                expenses: EXPENSE_CATS.map(n => ({name:n, months:new Array(12).fill(0)})),
+                savings:  SAVINGS_CATS.map(n => ({name:n, months:new Array(12).fill(0)}))
+              };
+              const nextBlock = {
+                income:   base.income.map(r   => ({name:r.name, months:r.months.slice()})),
+                expenses: base.expenses.map(r => ({name:r.name, months:r.months.slice()})),
+                savings:  base.savings.map(r  => ({name:r.name, months:r.months.slice()}))
+              };
+              // only add if not already present (defensive)
+              if (!nextBlock[blockKey].some(r => r.name.toLowerCase() === clean.toLowerCase())) {
+                nextBlock[blockKey].push({name: clean, months: new Array(12).fill(0)});
+              }
+              next[y] = nextBlock;
+            }
+            return next;
+          });
+          // Also extend the canonical category list so future seeded years include it.
+          if (type === 'Income'   && !INCOME_CATS.includes(clean))  INCOME_CATS.push(clean);
+          if (type === 'Expenses' && !EXPENSE_CATS.includes(clean)) EXPENSE_CATS.push(clean);
+          if (type === 'Savings'  && !SAVINGS_CATS.includes(clean)) SAVINGS_CATS.push(clean);
+        }).catch(err => {
+          console.error('Add category failed:', err);
+          alert('Could not add category: ' + err.message);
+        });
+      };
+
+      // filter transactions by current view
+      const visibleTxs = useMemo(()=>{
+        let out = txs.slice();
+        // scope to view unless user picked "All time" explicitly
+        if (txFilter.month === 'current') {
+          if (view === 'month') {
+            const prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
+            out = out.filter(t => t.date.startsWith(prefix));
+          } else if (view === 'year') {
+            out = out.filter(t => t.date.startsWith(year+'-'));
+          }
+          // view 'all' → no date filter
+        }
+        if (txFilter.type !== 'all') out = out.filter(t => t.type === txFilter.type);
+        if (txFilter.q) {
+          const q = txFilter.q.toLowerCase();
+          out = out.filter(t =>
+            t.category.toLowerCase().includes(q) ||
+            (t.details||'').toLowerCase().includes(q));
+        }
+        out.sort((a,b) => b.date.localeCompare(a.date));
+        return out;
+      }, [txs, monthIdx, year, view, txFilter]);
+
+      const visible = tab === 'all' ? groups : groups.filter(g => g.key === tab);
+      const viewLabel = view === 'month' ? MONTHS_LONG[monthIdx] + ' ' + year
+                      : view === 'year'  ? year + ' overview'
+                                         : 'All time';
+      const currentMonthLabel = viewLabel;
+      const monthChange = view === 'month' && monthIdx > 0 ? history.net[monthIdx] - history.net[monthIdx-1] : 0;
+
+      const defaultTxDate = (()=>{
+        const today = new Date();
+        const ty = today.getFullYear(), tm = today.getMonth();
+        if (view === 'month') {
+          if (ty === year && tm === monthIdx) return today.toISOString().slice(0,10);
+          return year + '-' + String(monthIdx+1).padStart(2,'0') + '-15';
+        }
+        return today.toISOString().slice(0,10);
+      })();
+
+      return (
+        <div className="app" data-screen-label="01 Budget">
+          <TxModal open={modalOpen} onClose={()=>setModalOpen(false)} onSave={addTx}
+            categories={categoriesByType} defaultDate={defaultTxDate}/>
+
+          {/* Topbar */}
+          <div className="topbar">
+            <div className="brand">
+              <div className="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* allocation flows out of the bag */}
+                  <path d="M20 18 Q12 14 6 8"  stroke="var(--sage)"       strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2"/>
+                  <path d="M20 18 Q20 10 20 4"  stroke="var(--blue)"       strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2"/>
+                  <path d="M20 18 Q28 14 34 8"  stroke="var(--amber)"      strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2"/>
+                  {/* destination dots */}
+                  <circle cx="6" cy="8"  r="2" fill="var(--sage)"/>
+                  <circle cx="20" cy="4" r="2" fill="var(--blue)"/>
+                  <circle cx="34" cy="8" r="2" fill="var(--amber)"/>
+                  {/* bag tie */}
+                  <path d="M15 15 L17 12 L23 12 L25 15 Z" fill="var(--ink-2)"/>
+                  {/* bag body */}
+                  <path d="M14 16 Q12 18 12 24 Q12 34 20 36 Q28 34 28 24 Q28 18 26 16 Z"
+                        fill="var(--terracotta)" stroke="var(--ink)" strokeWidth="0.8" strokeLinejoin="round"/>
+                  {/* dollar sign */}
+                  <text x="20" y="29" textAnchor="middle"
+                        fontFamily="'Fraunces', serif" fontSize="11" fontWeight="600" fill="#fff">$</text>
+                </svg>
+              </div>
+              <div>
+                <h1 className="serif">The Clements Fam Budget</h1>
+                <div className="sub">
+                  {txs.length.toLocaleString()} transactions
+                  <LastEditedBy />
+                </div>
+              </div>
+            </div>
+
+            <div className="view-switch">
+              <div className="seg">
+                <button className={view==='month'?'on':''} onClick={()=>setView('month')}>Month</button>
+                <button className={view==='year'?'on':''} onClick={()=>setView('year')}>Year</button>
+                <button className={view==='all'?'on':''} onClick={()=>setView('all')}>All time</button>
+              </div>
+              {view === 'month' && (
+                <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
+                  {MONTHS_LONG.map((m,i) => <option key={i} value={i}>{m}</option>)}
+                </select>
+              )}
+              {view !== 'all' && (
+                <select className="select-year" value={year} onChange={e=>setYear(parseInt(e.target.value))}>
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              )}
+            </div>
+
+            <div className="actions">
+              <button className="btn" onClick={()=>setTweaksOpen(v=>!v)}>Theme</button>
+              <button className="btn btn-primary" onClick={()=>setModalOpen(true)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add transaction
+              </button>
+            </div>
+          </div>
+
+          {/* Hero */}
+          <div className="hero">
+            <div className="card feature">
+              <div>
+                <div className="stat-label">{view === 'month' ? 'Net this month' : view === 'year' ? 'Net '+year : 'Net · all time'}</div>
+                <div className="stat-val serif">{fmt(totals.netA)}</div>
+                <div className="stat-sub">
+                  {view === 'month' && monthIdx > 0 && <span className={"pill " + (monthChange>=0?'up':'down')}>
+                    {monthChange>=0?'▲':'▼'} {fmtSigned(monthChange)} vs {MONTHS[monthIdx-1]}
+                  </span>}
+                  <span style={{marginLeft: view==='month' && monthIdx > 0 ? 8 : 0, color:'var(--ink-3)'}}>planned {fmt(totals.netB)}</span>
+                </div>
+              </div>
+              <Spark data={view==='month' ? history.net.slice(0, monthIdx+1) : view==='year' ? history.net : yearlyHistory.map(y=>y.net)} color="var(--sage)"/>
+            </div>
+
+            <div className="card">
+              <div className="stat-label">Income</div>
+              <div className="stat-val serif small">{fmt(totals.incA)}</div>
+              <div className="stat-sub" style={{color:'var(--ink-3)'}}>of {fmt(totals.incB)} planned</div>
+              <div style={{marginTop:12}}><Bar value={totals.incA} budget={totals.incB} accent="sage" rowType="Income"/></div>
+            </div>
+
+            <div className="card">
+              <div className="stat-label">Spent</div>
+              <div className="stat-val serif small">{fmt(totals.expA)}</div>
+              <div className="stat-sub" style={{color:'var(--ink-3)'}}>of {fmt(totals.expB)} budgeted</div>
+              <div style={{marginTop:12}}><Bar value={totals.expA} budget={totals.expB} accent="terra" rowType="Expenses"/></div>
+            </div>
+
+            <div className="card">
+              <div className="stat-label">Savings rate</div>
+              <div className="donut-wrap" style={{marginTop:4}}>
+                <Donut slices={[
+                  { value: Math.max(0, totals.incA - totals.expA), color: 'var(--blue)' },
+                  { value: Math.max(0, totals.expA), color: 'var(--line)' }
+                ]}/>
+                <div className="legend">
+                  <div className="legend-row"><span className="legend-dot" style={{background:'var(--blue)'}}/><span>Saved <strong className="num">{fmt(Math.max(0, totals.incA - totals.expA))}</strong></span></div>
+                  <div className="legend-row"><span className="legend-dot" style={{background:'var(--terracotta)'}}/><span>Spent <strong className="num">{fmt(totals.expA)}</strong></span></div>
+                  <div className="legend-row"><span className="legend-dot" style={{background:'var(--sage)'}}/><span>Income <strong className="num">{fmt(totals.incA)}</strong></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Allocation strip */}
+          <AllocationStrip totals={totals} view={view} year={year} monthName={MONTHS[monthIdx]}/>
+
+          {/* Tabs */}
+          <div className="tabs">
+            {[{k:'all',l:'All categories'},{k:'Income',l:'Income'},{k:'Expenses',l:'Expenses'},{k:'Savings',l:'Savings'}].map(t => (
+              <button key={t.k} className={"tab " + (tab===t.k?'active':'')} onClick={()=>setTab(t.k)}>{t.l}</button>
+            ))}
+          </div>
+
+          {/* Main grid */}
+          <div className="main-grid">
+            <div style={{display:'flex', flexDirection:'column', gap:18}}>
+              {/* Categories table */}
+              <div className="table-card">
+                <div className="table-head">
+                  <h2 className="serif">Categories · {viewLabel}</h2>
+                  <div style={{fontSize:12, color:'var(--ink-3)', display:'flex', gap:14, alignItems:'center'}}>
+                    <span>click any budget value to edit</span>
+                  </div>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th className="num">Budget</th>
+                      <th className="num">Actual</th>
+                      <th className="num">Remaining</th>
+                      <th>Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map(g => (
+                      <React.Fragment key={g.key}>
+                        <GroupHeader label={g.label}
+                          right={<span className="num" style={{color:'var(--ink-2)'}}>{fmt(g.actual)} / {fmt(g.budget)}</span>}/>
+                        {g.rows.map(r => <Row key={r.key} row={r} monthIdx={monthIdx} view={view} budget={budgetForRow(r)} onEdit={editBudget}/>)}
+                        {!showHiddenFor.has(g.key) && g.hiddenCount > 0 && (
+                          <tr className="hidden-hint">
+                            <td colSpan="5" style={{padding:'8px 14px 8px 56px', color:'var(--ink-3)', fontSize:12, fontStyle:'italic'}}>
+                              {g.hiddenCount} {g.key.toLowerCase()} categor{g.hiddenCount===1?'y':'ies'} hidden (no activity or budget this {view === 'month' ? 'month' : view === 'year' ? 'year' : 'period'}).{' '}
+                              <button className="link-btn" onClick={()=>toggleShownFor(g.key)}>Show all</button>
+                            </td>
+                          </tr>
+                        )}
+                        {showHiddenFor.has(g.key) && (
+                          <tr className="hidden-hint">
+                            <td colSpan="5" style={{padding:'8px 14px 8px 56px', color:'var(--ink-3)', fontSize:12, fontStyle:'italic'}}>
+                              Showing all {g.key.toLowerCase()} categories.{' '}
+                              <button className="link-btn" onClick={()=>toggleShownFor(g.key)}>Hide unused</button>
+                            </td>
+                          </tr>
+                        )}
+                        {addingTo === g.key ? (
+                          <tr className="add-cat-row">
+                            <td colSpan="5" style={{padding:'10px 14px 10px 56px'}}>
+                              <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  placeholder={'New ' + g.key.toLowerCase() + ' category name'}
+                                  value={newCatName}
+                                  onChange={e=>setNewCatName(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') { addCategory(g.key, newCatName); setAddingTo(null); setNewCatName(''); }
+                                    if (e.key === 'Escape') { setAddingTo(null); setNewCatName(''); }
+                                  }}
+                                  style={{flex:1, padding:'7px 10px', border:'1px solid var(--line)', borderRadius:7, background:'var(--bg)', font:'inherit', color:'inherit'}}
+                                />
+                                <button className="btn btn-primary" style={{padding:'6px 12px'}}
+                                  onClick={()=>{ addCategory(g.key, newCatName); setAddingTo(null); setNewCatName(''); }}>
+                                  Add
+                                </button>
+                                <button className="btn" style={{padding:'6px 12px'}}
+                                  onClick={()=>{ setAddingTo(null); setNewCatName(''); }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr className="add-cat-row">
+                            <td colSpan="5" style={{padding:'6px 14px 6px 56px'}}>
+                              <button className="link-btn" onClick={()=>{ setAddingTo(g.key); setNewCatName(''); }}>
+                                + Add {g.key.toLowerCase().replace(/s$/,'')} category
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                        <SubtotalRow label={g.label} budget={g.budget} actual={g.actual} accent={g.accent} kind={g.key}/>
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Transactions */}
+              <div className="table-card">
+                <div className="table-head">
+                  <h2 className="serif">Transactions</h2>
+                  <button className="btn btn-primary" style={{padding:'6px 12px'}} onClick={()=>setModalOpen(true)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add
+                  </button>
+                </div>
+                <div className="tx-filter">
+                  <input placeholder="Search category or details…" value={txFilter.q}
+                    onChange={e=>setTxFilter({...txFilter, q: e.target.value})} style={{flex:1}}/>
+                  <select value={txFilter.type} onChange={e=>setTxFilter({...txFilter, type: e.target.value})}>
+                    <option value="all">All types</option>
+                    <option value="Income">Income</option>
+                    <option value="Expenses">Expenses</option>
+                    <option value="Savings">Savings</option>
+                  </select>
+                  <select value={txFilter.month} onChange={e=>setTxFilter({...txFilter, month: e.target.value})}>
+                    <option value="current">{view==='month' ? 'This month' : view==='year' ? 'This year' : 'All time'}</option>
+                    <option value="all">All time</option>
+                  </select>
+                </div>
+                <div className="tx-list">
+                  {visibleTxs.length === 0 && (
+                    <div style={{padding:'40px 20px', textAlign:'center', color:'var(--ink-3)', fontSize:13}}>
+                      No transactions match. Try "All time" or <button className="btn" style={{padding:'4px 10px', marginLeft:6}} onClick={()=>setModalOpen(true)}>add one</button>
+                    </div>
+                  )}
+                  {visibleTxs.slice(0, txLimit).map(t => (
+                    <div key={t.id} className="tx-row">
+                      <span className="tx-date num">{t.date.slice(5)}</span>
+                      <span className={"tx-type " + (t.type==='Income'?'income':t.type==='Expenses'?'expense':'')}
+                        style={t.type==='Savings'?{background:'var(--blue-soft)',color:'var(--blue-ink)'}:undefined}>
+                        {t.type}
+                      </span>
+                      <span style={{fontWeight:500}}>{t.category}</span>
+                      <span className="tx-details">{t.details || '—'}</span>
+                      <span className={"tx-amount num " + (t.type==='Income'?'income':'expense')}>
+                        {t.type==='Income' ? '+' : '−'}{fmtCents(t.amount)}
+                      </span>
+                      <button className="delete-btn" onClick={()=>deleteTx(t.id)} style={{opacity:0.6}} title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                      </button>
+                    </div>
+                  ))}
+                  {visibleTxs.length > txLimit && (
+                    <div style={{padding:'10px 18px', textAlign:'center', color:'var(--ink-3)', fontSize:12, borderTop:'1px solid var(--line)', display:'flex', gap:10, justifyContent:'center', alignItems:'center'}}>
+                      <span>Showing {txLimit} of {visibleTxs.length}</span>
+                      <button className="link-btn" onClick={()=>setTxLimit(n => n + 200)}>Load 200 more</button>
+                      <button className="link-btn" onClick={()=>setTxLimit(visibleTxs.length)}>Show all</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Fun fact */}
+              <FactCard txs={txs}/>
+            </div>
+
+            {/* Side panel */}
+            <div className="side">
+              <div className="card">
+                <h3 className="serif">
+                  {view === 'all' ? 'Yearly trend' : view === 'year' ? year + ' monthly trend' : year + ' trend'}
+                </h3>
+                {view === 'all' ? (
+                  <React.Fragment>
+                    <div className="mini-stat">
+                      <div className="mini-stat-head"><span className="name">Income</span><span className="vals num">{fmt(totals.incA)}</span></div>
+                      <Spark data={yearlyHistory.map(y=>y.inc)} color="var(--sage)"/>
+                    </div>
+                    <div className="mini-stat">
+                      <div className="mini-stat-head"><span className="name">Expenses</span><span className="vals num">{fmt(totals.expA)}</span></div>
+                      <Spark data={yearlyHistory.map(y=>y.exp)} color="var(--terracotta)"/>
+                    </div>
+                    <div className="mini-stat">
+                      <div className="mini-stat-head"><span className="name">Savings</span><span className="vals num">{fmt(totals.savA)}</span></div>
+                      <Spark data={yearlyHistory.map(y=>y.sav)} color="var(--blue)"/>
+                    </div>
+                    <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--ink-3)', marginTop:6, padding:'0 4px'}}>
+                      {yearlyHistory.map(y => <span key={y.year} className="num">{y.year}</span>)}
+                    </div>
+                  </React.Fragment>
+                ) : (
+                  <React.Fragment>
+                    <div className="mini-stat">
+                      <div className="mini-stat-head"><span className="name">Income</span><span className="vals num">{fmt(view==='year' ? history.inc.reduce((a,b)=>a+b,0) : history.inc[monthIdx])}</span></div>
+                      <Spark data={view==='year' ? history.inc : history.inc.slice(0, monthIdx+1)} color="var(--sage)"/>
+                    </div>
+                    <div className="mini-stat">
+                      <div className="mini-stat-head"><span className="name">Expenses</span><span className="vals num">{fmt(view==='year' ? history.exp.reduce((a,b)=>a+b,0) : history.exp[monthIdx])}</span></div>
+                      <Spark data={view==='year' ? history.exp : history.exp.slice(0, monthIdx+1)} color="var(--terracotta)"/>
+                    </div>
+                    <div className="mini-stat">
+                      <div className="mini-stat-head"><span className="name">Savings</span><span className="vals num">{fmt(view==='year' ? history.sav.reduce((a,b)=>a+b,0) : history.sav[monthIdx])}</span></div>
+                      <Spark data={view==='year' ? history.sav : history.sav.slice(0, monthIdx+1)} color="var(--blue)"/>
+                    </div>
+                  </React.Fragment>
+                )}
+              </div>
+
+              <div className="card">
+                <h3 className="serif">Insights</h3>
+                {(() => {
+                  const items = [];
+                  // over-budget category
+                  const over = decoratedRows.filter(r => r.type === 'Expenses' && budgetForRow(r) > 0 && r.actual > budgetForRow(r))
+                    .sort((a,b) => (b.actual-budgetForRow(b)) - (a.actual-budgetForRow(a)))[0];
+                  if (over) items.push(
+                    <div className="insight" key="over">
+                      <span className="insight-icon" style={{background:'var(--terra-soft)', color:'var(--terra-ink)'}}>!</span>
+                      <div><strong>{over.name}</strong> is over budget — {fmt(over.actual)} of {fmt(budgetForRow(over))}.</div>
+                    </div>);
+                  // net delta (month view only)
+                  if (view === 'month' && monthIdx > 0 && monthChange > 0) items.push(
+                    <div className="insight" key="net">
+                      <span className="insight-icon" style={{background:'var(--sage-soft)', color:'var(--sage-ink)'}}>↑</span>
+                      <div><strong>Net up {fmt(monthChange)}</strong> vs {MONTHS[monthIdx-1]} — keep it going.</div>
+                    </div>);
+                  // best year (all-time view)
+                  if (view === 'all' && yearlyHistory.length > 1) {
+                    const bestYr = [...yearlyHistory].sort((a,b)=>b.net-a.net)[0];
+                    items.push(
+                      <div className="insight" key="best">
+                        <span className="insight-icon" style={{background:'var(--amber-soft)', color:'var(--amber-ink)'}}>✓</span>
+                        <div>Best net year: <strong>{bestYr.year}</strong> at {fmt(bestYr.net)}.</div>
+                      </div>);
+                  }
+                  if (totals.savingsRate > 0) items.push(
+                    <div className="insight" key="sr">
+                      <span className="insight-icon" style={{background:'var(--blue-soft)', color:'var(--blue-ink)'}}>★</span>
+                      <div><strong>Savings rate {Math.round(totals.savingsRate*100)}%</strong> of {view==='month'?MONTHS[monthIdx]:view==='year'?year:'all-time'} income.</div>
+                    </div>);
+                  if (items.length === 0) items.push(
+                    <div className="insight" key="empty">
+                      <span className="insight-icon" style={{background:'var(--bg-elev)', color:'var(--ink-3)'}}>·</span>
+                      <div>No activity recorded for {viewLabel} yet. <button className="btn" style={{padding:'3px 8px', marginLeft:4}} onClick={()=>setModalOpen(true)}>Add one</button></div>
+                    </div>);
+                  return items;
+                })()}
+              </div>
+
+              <div className="card">
+                <h3 className="serif">Top spending</h3>
+                <div style={{display:'flex', flexDirection:'column', gap:10, marginTop:4}}>
+                  {decoratedRows.filter(r=>r.type==='Expenses' && r.actual > 0)
+                    .sort((a,b)=>b.actual-a.actual).slice(0,5).map(r => (
+                      <div key={r.key}>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize:13, marginBottom:4}}>
+                          <span style={{fontWeight:500}}>{r.name}</span>
+                          <span className="num" style={{color:'var(--ink-3)'}}>{fmt(r.actual)}</span>
+                        </div>
+                        <Bar value={r.actual} budget={budgetForRow(r)||r.actual} accent={r.color} rowType={r.type}/>
+                      </div>
+                    ))}
+                  {decoratedRows.filter(r=>r.type==='Expenses' && r.actual > 0).length === 0 && (
+                    <div style={{color:'var(--ink-3)', fontSize:13}}>No spending logged for {viewLabel}.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tweaks */}
+          <div className={"tweaks-panel " + (tweaksOpen?'open':'')}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
+              <h4 className="serif">Tweaks</h4>
+              <button onClick={()=>setTweaksOpen(false)} style={{color:'var(--ink-3)', fontSize:18}}>×</button>
+            </div>
+            <div className="tweak-row">
+              <label>Theme</label>
+              <div className="swatches">
+                {[
+                  {k:'warm', c:'linear-gradient(135deg,#faf7f2,#f2ede4)'},
+                  {k:'cool', c:'linear-gradient(135deg,#f4f7fa,#e9eef4)'},
+                  {k:'sage', c:'linear-gradient(135deg,#f4f6f2,#e8ece2)'},
+                  {k:'dark', c:'linear-gradient(135deg,#24221e,#1a1916)'}
+                ].map(s => (
+                  <div key={s.k} className={"swatch " + (tweaks.theme===s.k?'active':'')}
+                    style={{background: s.c}}
+                    onClick={()=>setTweak('theme', s.k)}/>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  
+})();
+</script>
+  <!-- Bootstrap: authenticates user, loads data from Supabase,
+       then activates the deferred React/Babel scripts above. -->
+  <script src="supabase-client.js"></script>
+
+  <!-- PWA: register the service worker so the app is installable.
+       Only runs when served over https (so skipped during file:// local
+       dev, and active only on the Vercel deployment). -->
+  <script>
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.warn('Service worker registration failed:', err);
+        });
+      });
+    }
+  </script>
+
+</body>
+</html>
