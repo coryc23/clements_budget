@@ -13,6 +13,6 @@
 // =============================================================
 
 window.SUPABASE_CONFIG = {
-  url:             'PASTE_YOUR_PROJECT_URL_HERE',
-  publishableKey:  'PASTE_YOUR_PUBLISHABLE_KEY_HERE'
+  url:             'https://ryrobxdedfrwgoaurnsf.supabase.co',
+  publishableKey:  'sb_publishable_lSCOlmJLt9n6vO8N7Kj1-Q_maAjGs37'
 };
