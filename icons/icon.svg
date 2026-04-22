@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
   <rect x="0" y="0" width="64" height="64" rx="14" ry="14" fill="#faf7f2"/>
-
   <g transform="translate(12 12) scale(1.0)">
     <path d="M20 18 Q12 14 6 8"  stroke="#8ab697"       stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
     <path d="M20 18 Q20 10 20 4"  stroke="#8cabcf"       stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
