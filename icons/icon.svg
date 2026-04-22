@@ -1,25 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
-  <!-- Rounded-square background -->
   <rect x="0" y="0" width="64" height="64" rx="14" ry="14" fill="#faf7f2"/>
 
-  <!-- Brand mark, scaled from 40x40 source to ~48x48 and centered -->
-  <g transform="translate(8 8) scale(1.2)">
-    <!-- allocation flows out of the bag -->
-    <path d="M20 18 Q12 14 6 8"  stroke="#8ab697"       stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
-    <path d="M20 18 Q20 10 20 4"  stroke="#8cabcf"       stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
-    <path d="M20 18 Q28 14 34 8"  stroke="#d9a441"      stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
-    <!-- destination dots -->
-    <circle cx="6" cy="8"  r="2" fill="#8ab697"/>
-    <circle cx="20" cy="4" r="2" fill="#8cabcf"/>
-    <circle cx="34" cy="8" r="2" fill="#d9a441"/>
-    <!-- bag tie -->
+  <g transform="translate(12 12) scale(1.0)">
+    <path d="M20 18 Q12 14 6 8"  stroke="#8ab697"       stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
+    <path d="M20 18 Q20 10 20 4"  stroke="#8cabcf"       stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
+    <path d="M20 18 Q28 14 34 8"  stroke="#d9a441"      stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2" fill="none"/>
+    <circle cx="6" cy="8"  r="2.5" fill="#8ab697"/>
+    <circle cx="20" cy="4" r="2.5" fill="#8cabcf"/>
+    <circle cx="34" cy="8" r="2.5" fill="#d9a441"/>
     <path d="M15 15 L17 12 L23 12 L25 15 Z" fill="#4a463f"/>
-    <!-- bag body -->
     <path d="M14 16 Q12 18 12 24 Q12 34 20 36 Q28 34 28 24 Q28 18 26 16 Z"
-          fill="#c67f67" stroke="#1f1d1a" stroke-width="0.8" stroke-linejoin="round"/>
-    <!-- dollar sign -->
+          fill="#c67f67" stroke="#1f1d1a" stroke-width="1" stroke-linejoin="round"/>
     <text x="20" y="29" text-anchor="middle"
-          font-family="Georgia, 'Fraunces', serif" font-size="11" font-weight="600" fill="#fff">$</text>
+          font-family="Georgia, 'Fraunces', serif" font-size="12" font-weight="700" fill="#fff">$</text>
   </g>
 </svg>
