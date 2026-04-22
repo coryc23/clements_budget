@@ -1064,6 +1064,33 @@
       );
     };
     window.TxModal = TxModal;
+
+    // Confirm dialog — replaces the native confirm() which can be permanently
+    // disabled by the browser if the user checks "don't allow this site to
+    // prompt again". Matches the app's modal styling.
+    var ConfirmModal = function({ open, title, message, confirmLabel, cancelLabel, danger, onConfirm, onClose }) {
+      if (!open) return null;
+      return (
+        <div className="modal-back" onClick={onClose}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth: 420}}>
+            <h3 className="serif">{title || 'Are you sure?'}</h3>
+            {message && <div style={{color:'var(--ink-2)', marginBottom: 8}}>{message}</div>}
+            <div className="modal-actions">
+              <button className="btn" onClick={onClose}>{cancelLabel || 'Cancel'}</button>
+              <button
+                className="btn btn-primary"
+                style={danger ? {background:'var(--terracotta)', color:'#fff'} : {}}
+                onClick={() => { onConfirm(); onClose(); }}
+                autoFocus
+              >
+                {confirmLabel || 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    window.ConfirmModal = ConfirmModal;
   
 })();
 </script>
@@ -1072,7 +1099,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, LastEditedBy,
+    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, LastEditedBy,
             colorFor, glyphFor, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -1240,6 +1267,9 @@
         ];
       }, [budgetsByYear, year]);
       const [modalOpen, setModalOpen] = useState(false);
+      // Confirm-dialog state. Set to { title, message, onConfirm } to show;
+      // null to hide.
+      const [confirmState, setConfirmState] = useState(null);
       const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
       const [tweaksOpen, setTweaksOpen] = useState(false);
       const [txFilter, setTxFilter] = useState({q: '', type: 'all', month: 'current'});
@@ -1461,7 +1491,18 @@
         }
       };
       const deleteTx = (id) => {
-        if (!confirm('Delete this transaction?')) return;
+        // Find the tx so we can show a descriptive message
+        const t = txs.find(x => x.id === id);
+        const desc = t ? `${t.category} · ${fmt(t.amount)}${t.details ? ' · ' + t.details : ''}` : '';
+        setConfirmState({
+          title: 'Delete this transaction?',
+          message: desc,
+          confirmLabel: 'Delete',
+          danger: true,
+          onConfirm: () => performDeleteTx(id)
+        });
+      };
+      const performDeleteTx = (id) => {
         // Save a snapshot in case we need to roll back
         const snapshot = txs.find(t => t.id === id);
         setTxs(prev => prev.filter(t => t.id !== id));
@@ -1569,6 +1610,15 @@
         <div className="app" data-screen-label="01 Budget">
           <TxModal open={modalOpen} onClose={()=>setModalOpen(false)} onSave={addTx}
             categories={categoriesByType} defaultDate={defaultTxDate}/>
+          <ConfirmModal
+            open={!!confirmState}
+            title={confirmState?.title}
+            message={confirmState?.message}
+            confirmLabel={confirmState?.confirmLabel}
+            danger={confirmState?.danger}
+            onConfirm={() => confirmState?.onConfirm()}
+            onClose={() => setConfirmState(null)}
+          />
 
           {/* Topbar */}
           <div className="topbar">
