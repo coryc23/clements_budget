@@ -38,42 +38,85 @@
         color: #1f1d1a;
       }
       #auth-overlay .card {
-        width: min(380px, 92vw);
+        width: min(400px, 92vw);
         background: #ffffff;
         border: 1px solid #e9e2d5;
-        border-radius: 14px;
-        padding: 32px 28px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        border-radius: 16px;
+        padding: 36px 32px 28px;
+        box-shadow: 0 4px 24px -8px rgba(30, 25, 20, 0.08);
+        animation: card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
       }
-      #auth-overlay h1 {
+      @keyframes card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+      #auth-overlay .brand-row {
+        display: flex; align-items: center; gap: 12px;
+        margin-bottom: 20px;
+      }
+      #auth-overlay .auth-mark {
+        width: 52px; height: 52px; flex-shrink: 0;
+      }
+      #auth-overlay .brand-text h1 {
         font-family: 'Fraunces', 'Times New Roman', serif;
-        font-weight: 500; font-size: 22px; letter-spacing: -0.02em;
-        margin: 0 0 4px;
+        font-weight: 500; font-size: 20px; letter-spacing: -0.02em;
+        margin: 0 0 2px;
       }
-      #auth-overlay .sub { color: #857f74; font-size: 12px; margin-bottom: 24px; }
+      #auth-overlay .brand-text .greeting {
+        color: #857f74; font-size: 13px; font-style: italic;
+        font-family: 'Fraunces', serif;
+      }
+
+      /* Animated mark paths — each draws itself, dots fade in after */
+      #auth-overlay .flow-line {
+        stroke-dasharray: 40;
+        stroke-dashoffset: 40;
+        animation: draw-line 0.8s ease-out forwards;
+      }
+      #auth-overlay .flow-line-1 { animation-delay: 0.3s; }
+      #auth-overlay .flow-line-2 { animation-delay: 0.5s; }
+      #auth-overlay .flow-line-3 { animation-delay: 0.7s; }
+      @keyframes draw-line { to { stroke-dashoffset: 0; } }
+
+      #auth-overlay .dot {
+        opacity: 0;
+        animation: dot-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+      #auth-overlay .dot-1 { animation-delay: 1.1s; }
+      #auth-overlay .dot-2 { animation-delay: 1.3s; }
+      #auth-overlay .dot-3 { animation-delay: 1.5s; }
+      @keyframes dot-pop { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }
+
+      #auth-overlay .bag-body {
+        opacity: 0;
+        animation: fade-in 0.4s ease-out 0.1s forwards;
+      }
+      @keyframes fade-in { to { opacity: 1; } }
+
       #auth-overlay label {
         display: block; font-size: 11px; text-transform: uppercase;
         letter-spacing: 0.08em; color: #857f74; font-weight: 600;
         margin-bottom: 6px; margin-top: 14px;
       }
       #auth-overlay input {
-        width: 100%; padding: 10px 12px;
+        width: 100%; padding: 11px 13px;
         border: 1px solid #e9e2d5; border-radius: 8px;
         font-size: 14px; font-family: inherit; color: #1f1d1a;
         background: #faf7f2;
-        transition: border-color 0.15s, box-shadow 0.15s;
+        transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+        box-sizing: border-box;
       }
       #auth-overlay input:focus {
         outline: none; border-color: #1f1d1a; background: #fff;
         box-shadow: 0 0 0 3px rgba(100, 130, 180, 0.15);
       }
       #auth-overlay button {
-        width: 100%; padding: 11px 14px; margin-top: 20px;
+        width: 100%; padding: 12px 14px; margin-top: 22px;
         border: 0; background: #1f1d1a; color: #faf7f2;
         font-family: inherit; font-size: 14px; font-weight: 500;
-        border-radius: 8px; cursor: pointer; transition: opacity 0.15s;
+        border-radius: 8px; cursor: pointer;
+        transition: opacity 0.15s, transform 0.08s;
       }
-      #auth-overlay button:hover { opacity: 0.85; }
+      #auth-overlay button:hover { opacity: 0.88; }
+      #auth-overlay button:active { transform: translateY(1px); }
       #auth-overlay button:disabled { opacity: 0.5; cursor: default; }
       #auth-overlay .err {
         color: oklch(0.38 0.07 40); background: oklch(0.94 0.04 40);
@@ -81,11 +124,51 @@
         margin-top: 14px; display: none;
       }
       #auth-overlay .err.show { display: block; }
-      #auth-overlay .loading { text-align: center; color: #857f74; font-size: 13px; }
+
+      #auth-overlay .footnote {
+        margin-top: 22px; padding-top: 18px;
+        border-top: 1px solid #f0eade;
+        font-family: 'Fraunces', serif;
+        font-size: 12px; color: #a29c8f; font-style: italic;
+        text-align: center;
+        animation: fade-in 0.5s ease-out 0.8s both;
+      }
+
+      #auth-overlay .loading-wrap {
+        text-align: center; padding: 24px 0;
+        color: #857f74; font-size: 13px;
+      }
+      #auth-overlay .loading-wrap .auth-mark { margin: 0 auto 14px; display: block; }
+      #auth-overlay .loading-wrap .loading-text {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 15px;
+      }
     </style>
     <div class="card">
-      <h1>The Clements Fam Budget</h1>
-      <div class="sub">Sign in to continue</div>
+      <div class="brand-row">
+        <svg class="auth-mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- dashed flow lines — animated to draw themselves -->
+          <path class="flow-line flow-line-1" d="M20 18 Q12 14 6 8"  stroke="#8ab697" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+          <path class="flow-line flow-line-2" d="M20 18 Q20 10 20 4"  stroke="#8cabcf" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+          <path class="flow-line flow-line-3" d="M20 18 Q28 14 34 8"  stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+          <!-- destination dots — pop in after lines draw -->
+          <circle class="dot dot-1" cx="6" cy="8"  r="2" fill="#8ab697" style="transform-origin: 6px 8px;"/>
+          <circle class="dot dot-2" cx="20" cy="4" r="2" fill="#8cabcf" style="transform-origin: 20px 4px;"/>
+          <circle class="dot dot-3" cx="34" cy="8" r="2" fill="#d9a441" style="transform-origin: 34px 8px;"/>
+          <!-- bag body fades in first -->
+          <g class="bag-body">
+            <path d="M15 15 L17 12 L23 12 L25 15 Z" fill="#4a463f"/>
+            <path d="M14 16 Q12 18 12 24 Q12 34 20 36 Q28 34 28 24 Q28 18 26 16 Z"
+                  fill="#c67f67" stroke="#1f1d1a" stroke-width="0.8" stroke-linejoin="round"/>
+            <text x="20" y="29" text-anchor="middle"
+                  font-family="Georgia, serif" font-size="11" font-weight="600" fill="#fff">$</text>
+          </g>
+        </svg>
+        <div class="brand-text">
+          <h1>The Clements Fam Budget</h1>
+          <div class="greeting" id="auth-greeting">Welcome back</div>
+        </div>
+      </div>
       <form id="auth-form">
         <label for="auth-email">Email</label>
         <input id="auth-email" type="email" autocomplete="email" required />
@@ -94,9 +177,39 @@
         <div id="auth-err" class="err"></div>
         <button id="auth-submit" type="submit">Sign in</button>
       </form>
+      <div class="footnote" id="auth-footnote"></div>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  // Set a time-of-day greeting on the login screen
+  (() => {
+    const h = new Date().getHours();
+    const g = h < 5 ? 'Burning the midnight oil'
+            : h < 12 ? 'Good morning'
+            : h < 17 ? 'Good afternoon'
+            : h < 22 ? 'Good evening'
+            : 'Good evening';
+    const el = document.getElementById('auth-greeting');
+    if (el) el.textContent = g;
+  })();
+
+  // Pick a random footnote to rotate through on each page load. These
+  // are shown ONLY while logged out, so they don't clutter the app
+  // experience. Hand-written rather than data-driven to keep tone warm.
+  (() => {
+    const notes = [
+      'Every dollar has a job.',
+      'Small steps, consistent habits.',
+      'Built for two.',
+      'A quiet corner of the internet, just for us.',
+      'Two years of receipts and counting.',
+      'Made with care.'
+    ];
+    const n = notes[Math.floor(Math.random() * notes.length)];
+    const el = document.getElementById('auth-footnote');
+    if (el) el.textContent = n;
+  })();
 
   function showLoginError(msg) {
     const e = document.getElementById('auth-err');
@@ -106,8 +219,24 @@
 
   function setLoading(label) {
     overlay.querySelector('.card').innerHTML = `
-      <h1>The Clements Fam Budget</h1>
-      <div class="loading">${label || 'Loading…'}</div>
+      <div class="loading-wrap">
+        <svg class="auth-mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path class="flow-line flow-line-1" d="M20 18 Q12 14 6 8"  stroke="#8ab697" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+          <path class="flow-line flow-line-2" d="M20 18 Q20 10 20 4"  stroke="#8cabcf" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+          <path class="flow-line flow-line-3" d="M20 18 Q28 14 34 8"  stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+          <circle class="dot dot-1" cx="6" cy="8"  r="2" fill="#8ab697"/>
+          <circle class="dot dot-2" cx="20" cy="4" r="2" fill="#8cabcf"/>
+          <circle class="dot dot-3" cx="34" cy="8" r="2" fill="#d9a441"/>
+          <g class="bag-body">
+            <path d="M15 15 L17 12 L23 12 L25 15 Z" fill="#4a463f"/>
+            <path d="M14 16 Q12 18 12 24 Q12 34 20 36 Q28 34 28 24 Q28 18 26 16 Z"
+                  fill="#c67f67" stroke="#1f1d1a" stroke-width="0.8" stroke-linejoin="round"/>
+            <text x="20" y="29" text-anchor="middle"
+                  font-family="Georgia, serif" font-size="11" font-weight="600" fill="#fff">$</text>
+          </g>
+        </svg>
+        <div class="loading-text">${label || 'Loading…'}</div>
+      </div>
     `;
   }
 
