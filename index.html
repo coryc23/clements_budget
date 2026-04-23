@@ -29,6 +29,27 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <!-- Local config — edit config.js to paste your Supabase URL + publishable key -->
 <script src="config.js"></script>
+
+<!-- Preload the user's saved theme from localStorage and apply it to <body>
+     as soon as the DOM exists. This prevents a flash of the wrong theme on
+     load: without it, the page paints in 'warm' (the default) for a fraction
+     of a second before React mounts and switches. -->
+<script>
+  (function() {
+    try {
+      var saved = localStorage.getItem('clements-budget-theme');
+      if (saved && ['warm','cool','sage','dark'].indexOf(saved) !== -1) {
+        // Apply as soon as <body> exists. DOMContentLoaded is too late —
+        // we want this to happen on the first paint.
+        var apply = function() {
+          if (document.body) document.body.className = 'theme-' + saved;
+          else requestAnimationFrame(apply);
+        };
+        apply();
+      }
+    } catch (e) { /* ignore; localStorage can fail in private mode */ }
+  })();
+</script>
 <style>
   :root {
     --bg: #faf7f2;
@@ -2119,7 +2140,21 @@
       // Confirm-dialog state. Set to { title, message, onConfirm } to show;
       // null to hide.
       const [confirmState, setConfirmState] = useState(null);
-      const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
+      // Initialize theme from (in priority order):
+      //   1. Supabase profile (set by supabase-client.js on login)
+      //   2. localStorage (set by the preload script in index.html head)
+      //   3. TWEAK_DEFAULTS (the hard-coded fallback)
+      // This keeps theme consistent across devices while painting the
+      // right theme on the very first render.
+      const [tweaks, setTweaks] = useState(() => {
+        const userTheme = window.__currentUser?.theme;
+        let localTheme = null;
+        try { localTheme = localStorage.getItem('clements-budget-theme'); } catch(e) {}
+        return {
+          ...TWEAK_DEFAULTS,
+          theme: userTheme || localTheme || TWEAK_DEFAULTS.theme
+        };
+      });
       const [tweaksOpen, setTweaksOpen] = useState(false);
       const [txFilter, setTxFilter] = useState({q: '', type: 'all', month: 'current'});
       const [addingTo, setAddingTo] = useState(null); // 'Income' | 'Expenses' | 'Savings' | null
@@ -2151,6 +2186,13 @@
         const next = {...tweaks, [k]: v};
         setTweaks(next);
         window.parent.postMessage({type: '__edit_mode_set_keys', edits: {[k]: v}}, '*');
+        // If the theme changed, persist it to both localStorage (instant,
+        // per-device) and Supabase (cross-device). The save is fire-and-
+        // forget: failures just mean it won't sync to other devices, but
+        // the current session still works fine.
+        if (k === 'theme' && window.__saveTheme) {
+          window.__saveTheme(v);
+        }
       };
 
       // categories list for modal

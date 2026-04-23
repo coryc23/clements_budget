@@ -37,6 +37,25 @@
         font-family: 'Inter', -apple-system, system-ui, sans-serif;
         color: #1f1d1a;
       }
+      /* Theme overrides so the login screen matches your chosen theme.
+         The preload script in index.html sets body.theme-X from
+         localStorage before this overlay is created, so these rules
+         apply immediately. */
+      body.theme-cool #auth-overlay { background: #f4f7fa; color: #1a2330; }
+      body.theme-cool #auth-overlay .card { background: #ffffff; border-color: #dde4ed; }
+      body.theme-cool #auth-overlay input { background: #f4f7fa; border-color: #dde4ed; }
+      body.theme-sage #auth-overlay { background: #f4f6f2; color: #1d251c; }
+      body.theme-sage #auth-overlay .card { background: #ffffff; border-color: #dee3d8; }
+      body.theme-sage #auth-overlay input { background: #f4f6f2; border-color: #dee3d8; }
+      body.theme-dark #auth-overlay { background: #1a1916; color: #f5f1e8; }
+      body.theme-dark #auth-overlay .card { background: #24221e; border-color: #3a3630; box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4); }
+      body.theme-dark #auth-overlay input { background: #1a1916; border-color: #3a3630; color: #f5f1e8; }
+      body.theme-dark #auth-overlay input:focus { background: #24221e; border-color: #f5f1e8; }
+      body.theme-dark #auth-overlay button { background: #f5f1e8; color: #1a1916; }
+      body.theme-dark #auth-overlay .greeting,
+      body.theme-dark #auth-overlay .footnote,
+      body.theme-dark #auth-overlay .loading-wrap { color: #c8c1b3; }
+      body.theme-dark #auth-overlay .footnote { border-color: #3a3630; }
       #auth-overlay .card {
         width: min(400px, 92vw);
         background: #ffffff;
@@ -740,13 +759,38 @@
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name, theme')
         .eq('id', user.id)
         .single();
       window.__currentUser = {
         id: user.id,
         email: user.email,
-        displayName: profile?.display_name || user.email.split('@')[0]
+        displayName: profile?.display_name || user.email.split('@')[0],
+        theme: profile?.theme || 'warm'
+      };
+
+      // Reconcile theme: apply Supabase value to body immediately (in case
+      // localStorage was stale) and sync localStorage to match. This is
+      // what makes theme "follow you" across devices.
+      if (profile?.theme && ['warm','cool','sage','dark'].includes(profile.theme)) {
+        document.body.className = 'theme-' + profile.theme;
+        try { localStorage.setItem('clements-budget-theme', profile.theme); } catch(e) {}
+      }
+
+      // Expose a helper so the React app can save theme changes back to
+      // Supabase. Writes to both localStorage (instant) and the profile
+      // (cross-device sync).
+      window.__saveTheme = async function(theme) {
+        if (!['warm','cool','sage','dark'].includes(theme)) return;
+        try { localStorage.setItem('clements-budget-theme', theme); } catch(e) {}
+        try {
+          await supabase
+            .from('profiles')
+            .update({ theme: theme })
+            .eq('id', user.id);
+        } catch (err) {
+          console.warn('Failed to sync theme to Supabase (will still work on this device):', err);
+        }
       };
 
       // Set up realtime subscription BEFORE React mounts. Events that
