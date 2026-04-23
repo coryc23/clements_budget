@@ -118,15 +118,39 @@
   /* Allocation strip */
   .alloc-strip { display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; margin-bottom: 18px; border-radius: 999px; background: var(--bg-soft); border: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
 
-  /* Fact card (legacy — no longer rendered but styles kept for safety) */
+  /* Fact card */
   .fact-card { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; background: linear-gradient(135deg, var(--amber-soft) 0%, var(--bg-elev) 70%); border: 1px solid var(--line); border-radius: 14px; position: relative; }
   .fact-icon { font-size: 28px; flex-shrink: 0; line-height: 1; padding-top: 2px; }
-  .fact-body { flex: 1; min-width: 0; }
+  .fact-body { flex: 1; min-width: 0; padding-right: 28px; }
   .fact-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; margin-bottom: 4px; }
   .fact-text { font-size: 14px; color: var(--ink); line-height: 1.5; }
-  .fact-hint { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; position: absolute; top: 10px; right: 14px; opacity: 0.6; }
+  .fact-cycle {
+    position: absolute; top: 12px; right: 12px;
+    background: transparent; border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px; cursor: pointer;
+    color: var(--ink-3); display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .fact-cycle:hover { background: var(--bg-elev); color: var(--ink); border-color: var(--line-strong); }
+  .fact-cycle:active { transform: scale(0.95); }
 
-  /* Greeting card — replaces fact card with a warm, personalized hello */
+  /* Greeting line — compact "good morning, Cory 🌅" shown at top of page */
+  .greeting-line {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 0 16px;
+    animation: greeting-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .greeting-emoji { font-size: 22px; line-height: 1; }
+  .greeting-line .greeting-text {
+    font-family: 'Fraunces', serif;
+    font-size: 22px; letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .greeting-line .greeting-intro { font-weight: 400; font-style: italic; color: var(--ink-2); }
+  .greeting-line .greeting-name { font-weight: 600; color: var(--ink); }
+
+  /* Greeting card (the large version — kept around as a component in case
+     we want it back, but no longer rendered by default) */
   .greeting-card { padding: 18px 22px; background: linear-gradient(135deg, var(--sage-soft) 0%, var(--bg-elev) 65%); border: 1px solid var(--line); border-radius: 14px; animation: greeting-in 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
   .greeting-body { display: flex; flex-direction: column; gap: 4px; }
   .greeting-headline { font-family: 'Fraunces', serif; font-size: 22px; letter-spacing: -0.01em; color: var(--ink); }
@@ -868,6 +892,45 @@
       );
     }
 
+    // Compact time-of-day greeting line. Shown at the top of the main
+    // page, above the hero stats. Uses an emoji that matches the time
+    // of day (sun/moon/stars) to add a touch of warmth.
+    var GreetingLine = function() {
+      const { useState, useEffect } = React;
+      // Re-render every minute so the greeting shifts with the day
+      // without needing a page reload (e.g. morning → afternoon at noon).
+      const [, force] = useState(0);
+      useEffect(() => {
+        const id = setInterval(() => force(n => n+1), 60 * 1000);
+        return () => clearInterval(id);
+      }, []);
+
+      const h = new Date().getHours();
+      let greeting, emoji;
+      if (h < 5) {
+        greeting = 'Still up'; emoji = '🌙';
+      } else if (h < 12) {
+        greeting = 'Good morning'; emoji = '☀️';
+      } else if (h < 17) {
+        greeting = 'Good afternoon'; emoji = '🌤️';
+      } else if (h < 21) {
+        greeting = 'Good evening'; emoji = '🌆';
+      } else {
+        greeting = 'Good evening'; emoji = '🌙';
+      }
+      const name = window.__currentUser?.displayName || 'friend';
+
+      return (
+        <div className="greeting-line">
+          <span className="greeting-emoji" aria-hidden="true">{emoji}</span>
+          <span className="greeting-text">
+            <span className="greeting-intro">{greeting}, </span>
+            <span className="greeting-name">{name}</span>
+          </span>
+        </div>
+      );
+    }
+
     // Personalized time-of-day greeting card. Replaces the previous
     // "fun fact" card with something warmer and more personal.
     // Uses the logged-in user's display name (set up by supabase-client.js
@@ -929,13 +992,14 @@
       );
     }
 
-    // FactCard was the previous "Did you know" card. It is retained
-    // here as a no-op stub so the surrounding code keeps working, and
-    // GreetingCard replaces it in the JSX below.
+    // FactCard — rotates through dozens of computed insights from the
+    // transaction data. Each render picks a random fact, and users can
+    // cycle to the next one with the arrow button. The bank of facts is
+    // deliberately rich — historical records, category deep-dives, time
+    // patterns, streaks, and couple-vs-couple comparisons.
     var FactCard = function({ txs }) {
       const { useMemo, useState, useEffect } = React;
 
-      // Compute a bank of facts from the tx data. Each returns {icon, title, body} or null if not applicable.
       const facts = useMemo(() => {
         if (!txs.length) return [];
         const out = [];
@@ -946,113 +1010,148 @@
         const totalExp = exp.reduce((a,b)=>a+b.amount, 0);
         const totalSav = sav.reduce((a,b)=>a+b.amount, 0);
 
-        // 1. Total transactions
+        const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+        // ============================================================
+        // SECTION 1 — Grand totals and lifetime flow
+        // ============================================================
         out.push({
           icon: '📋',
           title: 'Grand total',
           body: `You've logged ${txs.length.toLocaleString()} transactions, moving ${fmt(totalInc + totalExp + totalSav)} through this budget all-time.`
         });
 
-        // 2. Lifetime income
         out.push({
           icon: '💵',
           title: 'Lifetime income',
           body: `You've earned ${fmt(totalInc)} since you started tracking.`
         });
 
-        // 3. Biggest expense category (all time)
-        const expByCat = {};
-        for (const t of exp) expByCat[t.category] = (expByCat[t.category]||0) + t.amount;
-        const topExp = Object.entries(expByCat).sort((a,b)=>b[1]-a[1])[0];
-        if (topExp) {
+        if (totalExp > 0) {
           out.push({
-            icon: '🏆',
-            title: 'Top spending category',
-            body: `${topExp[0]} has cost you ${fmt(topExp[1])} over the years — that's ${(topExp[1]/totalExp*100).toFixed(0)}% of everything you've spent.`
+            icon: '💸',
+            title: 'Lifetime spending',
+            body: `You've spent ${fmt(totalExp)} across ${exp.length.toLocaleString()} expense transactions.`
           });
         }
 
-        // 4. Biggest single transaction
+        if (totalSav > 0) {
+          out.push({
+            icon: '🏦',
+            title: 'Put away',
+            body: `${fmt(totalSav)} has moved into savings and goals since you started tracking.`
+          });
+        }
+
+        // Savings rate overall
+        const sr = totalInc > 0 ? (totalInc - totalExp) / totalInc * 100 : 0;
+        if (totalInc > 0) {
+          out.push({
+            icon: '📈',
+            title: 'Lifetime savings rate',
+            body: `Across everything you've tracked, ${sr.toFixed(0)}% of income didn't get spent. ${sr > 20 ? "That's a strong rate." : sr > 10 ? "That's a healthy rate." : "Every bit counts."}`
+          });
+        }
+
+        // ============================================================
+        // SECTION 2 — Records and superlatives
+        // ============================================================
         const topTx = [...txs].sort((a,b)=>b.amount-a.amount)[0];
         if (topTx) {
           out.push({
             icon: '💎',
             title: 'Largest transaction',
-            body: `Your biggest single entry: ${fmt(topTx.amount)} for ${topTx.category} on ${topTx.date}.`
+            body: `Your biggest single entry: ${fmt(topTx.amount)} for ${topTx.category} on ${topTx.date}${topTx.details ? ' — ' + topTx.details : ''}.`
           });
         }
 
-        // 5. Best savings month (highest inc-exp)
-        const months = {};
-        for (const t of txs) {
-          const m = t.date.slice(0,7);
-          if (!months[m]) months[m] = {inc:0, exp:0};
-          if (t.type === 'Income') months[m].inc += t.amount;
-          else if (t.type === 'Expenses') months[m].exp += t.amount;
-        }
-        const monthArr = Object.entries(months).map(([m,v])=>({m, net: v.inc-v.exp, ...v}));
-        const bestMonth = monthArr.filter(m=>m.inc>0).sort((a,b)=>b.net-a.net)[0];
-        if (bestMonth) {
-          const [y, mo] = bestMonth.m.split('-');
-          const monthName = ['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(mo)-1];
+        const topExpTx = [...exp].sort((a,b)=>b.amount-a.amount)[0];
+        if (topExpTx && topExpTx !== topTx) {
           out.push({
-            icon: '🌟',
-            title: 'Best savings month',
-            body: `${monthName} ${y} was your best — you kept ${fmt(bestMonth.net)} after expenses.`
+            icon: '🛒',
+            title: 'Largest expense',
+            body: `The most you've spent in one transaction: ${fmt(topExpTx.amount)} on ${topExpTx.category}${topExpTx.details ? ' (' + topExpTx.details + ')' : ''}.`
           });
         }
 
-        // 6. Worst overspend month
-        const worstMonth = monthArr.filter(m=>m.inc>0 || m.exp>0).sort((a,b)=>a.net-b.net)[0];
-        if (worstMonth && worstMonth.net < 0) {
-          const [y, mo] = worstMonth.m.split('-');
-          const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1];
+        const topIncTx = [...inc].sort((a,b)=>b.amount-a.amount)[0];
+        if (topIncTx) {
           out.push({
-            icon: '⚠️',
-            title: 'Toughest month',
-            body: `${monthName} ${y} was your roughest — expenses outpaced income by ${fmt(Math.abs(worstMonth.net))}.`
+            icon: '💰',
+            title: 'Largest income',
+            body: `Your biggest payday: ${fmt(topIncTx.amount)} on ${topIncTx.date}${topIncTx.details ? ' — ' + topIncTx.details : ''}.`
           });
         }
 
-        // 7. Average per month
-        const activeMonths = monthArr.filter(m=>m.inc>0 || m.exp>0).length;
-        if (activeMonths > 0) {
+        // Smallest non-zero expense
+        const smallExp = [...exp].filter(t => t.amount > 0).sort((a,b)=>a.amount-b.amount)[0];
+        if (smallExp) {
           out.push({
-            icon: '📅',
-            title: 'Monthly average',
-            body: `You average ${fmt(totalInc/activeMonths)} in and ${fmt(totalExp/activeMonths)} out per month across ${activeMonths} tracked months.`
+            icon: '🪙',
+            title: 'Smallest expense',
+            body: `Your tiniest tracked expense: ${fmt(smallExp.amount)} for ${smallExp.category}${smallExp.details ? ' — ' + smallExp.details : ''}. Every cent counts.`
           });
         }
 
-        // 8. Savings to date
-        if (totalSav > 0) {
+        // Oldest transaction
+        const oldestTx = [...txs].sort((a,b)=>a.date.localeCompare(b.date))[0];
+        if (oldestTx) {
+          const d = new Date(oldestTx.date);
+          const daysSince = Math.round((new Date() - d) / (1000*60*60*24));
           out.push({
-            icon: '🏦',
-            title: 'Put away',
-            body: `You've moved ${fmt(totalSav)} into savings & goals since you started tracking.`
+            icon: '📜',
+            title: 'Your origin story',
+            body: `Your very first transaction: ${fmt(oldestTx.amount)} for ${oldestTx.category} on ${oldestTx.date}. That was ${daysSince.toLocaleString()} days ago.`
           });
         }
 
-        // 9. Coffee / small habit fact
-        const coffeeCats = ['Starbucks', 'Coffee', 'Dining'];
-        const coffeeTotal = exp.filter(t=>coffeeCats.includes(t.category)).reduce((a,b)=>a+b.amount, 0);
-        if (coffeeTotal > 50) {
+        // Most recent
+        const newestTx = [...txs].sort((a,b)=>b.date.localeCompare(a.date))[0];
+        if (newestTx) {
           out.push({
-            icon: '☕',
-            title: 'Small sips add up',
-            body: `${fmt(coffeeTotal)} has gone to coffee and dining — small purchases compound.`
+            icon: '📍',
+            title: 'Most recent',
+            body: `Latest entry: ${fmt(newestTx.amount)} for ${newestTx.category} on ${newestTx.date}.`
           });
         }
 
-        // 10. Savings rate overall
-        const sr = totalInc > 0 ? (totalInc - totalExp) / totalInc * 100 : 0;
-        out.push({
-          icon: '📈',
-          title: 'Lifetime savings rate',
-          body: `Across everything you've tracked, ${sr.toFixed(0)}% of income didn't get spent.`
-        });
+        // ============================================================
+        // SECTION 3 — Category deep dives
+        // ============================================================
+        const expByCat = {};
+        for (const t of exp) expByCat[t.category] = (expByCat[t.category]||0) + t.amount;
+        const sortedExpCat = Object.entries(expByCat).sort((a,b)=>b[1]-a[1]);
 
-        // 11. Most active category
+        if (sortedExpCat[0]) {
+          const [name, amt] = sortedExpCat[0];
+          out.push({
+            icon: '🏆',
+            title: 'Top spending category',
+            body: `${name} has cost you ${fmt(amt)} over the years — that's ${(amt/totalExp*100).toFixed(0)}% of everything you've spent.`
+          });
+        }
+
+        if (sortedExpCat[1]) {
+          const [name, amt] = sortedExpCat[1];
+          out.push({
+            icon: '🥈',
+            title: 'Runner-up spending',
+            body: `${name} is your second-highest expense category at ${fmt(amt)} all-time.`
+          });
+        }
+
+        if (sortedExpCat[2]) {
+          const [name, amt] = sortedExpCat[2];
+          out.push({
+            icon: '🥉',
+            title: 'Bronze medalist',
+            body: `${name} rounds out your top three spending categories with ${fmt(amt)}.`
+          });
+        }
+
+        // Category you've used most frequently (by count)
         const catCounts = {};
         for (const t of txs) catCounts[t.category] = (catCounts[t.category]||0) + 1;
         const topCount = Object.entries(catCounts).sort((a,b)=>b[1]-a[1])[0];
@@ -1060,35 +1159,380 @@
           out.push({
             icon: '🔁',
             title: 'Most frequent category',
-            body: `${topCount[0]} shows up ${topCount[1]} times — your most-logged category.`
+            body: `${topCount[0]} shows up ${topCount[1].toLocaleString()} times — your most-logged category of all time.`
           });
         }
 
-        // 12. Recent streak
+        // Average transaction size per top category
+        if (sortedExpCat[0]) {
+          const [name] = sortedExpCat[0];
+          const catTxs = exp.filter(t => t.category === name);
+          const avgAmt = catTxs.reduce((a,b)=>a+b.amount, 0) / catTxs.length;
+          out.push({
+            icon: '💳',
+            title: `${name}, on average`,
+            body: `Each ${name} transaction averages ${fmt(avgAmt)}, across ${catTxs.length} entries.`
+          });
+        }
+
+        // Coffee / dining habit
+        const coffeeCats = ['Starbucks', 'Coffee', 'Dining', 'Restaurants'];
+        const coffeeTxs = exp.filter(t=>coffeeCats.includes(t.category));
+        const coffeeTotal = coffeeTxs.reduce((a,b)=>a+b.amount, 0);
+        if (coffeeTotal > 50) {
+          out.push({
+            icon: '☕',
+            title: 'Small sips add up',
+            body: `${fmt(coffeeTotal)} across ${coffeeTxs.length} coffee and dining trips. That's roughly ${fmt(coffeeTotal/coffeeTxs.length)} per outing.`
+          });
+        }
+
+        // Grocery stats
+        const groceryTxs = exp.filter(t => t.category === 'Groceries');
+        if (groceryTxs.length > 10) {
+          const groceryTotal = groceryTxs.reduce((a,b)=>a+b.amount, 0);
+          out.push({
+            icon: '🛒',
+            title: 'Grocery habit',
+            body: `${groceryTxs.length.toLocaleString()} grocery trips totaling ${fmt(groceryTotal)} — averaging ${fmt(groceryTotal/groceryTxs.length)} per run.`
+          });
+        }
+
+        // Number of distinct categories used
+        const uniqueCats = Object.keys(catCounts).length;
+        out.push({
+          icon: '🗂️',
+          title: 'Diverse spending',
+          body: `You've used ${uniqueCats} different categories to sort your money.`
+        });
+
+        // ============================================================
+        // SECTION 4 — Monthly patterns
+        // ============================================================
+        const months = {};
+        for (const t of txs) {
+          const m = t.date.slice(0,7);
+          if (!months[m]) months[m] = {inc:0, exp:0, sav:0, count:0};
+          if (t.type === 'Income') months[m].inc += t.amount;
+          else if (t.type === 'Expenses') months[m].exp += t.amount;
+          else if (t.type === 'Savings') months[m].sav += t.amount;
+          months[m].count++;
+        }
+        const monthArr = Object.entries(months).map(([m,v])=>({m, net: v.inc-v.exp, ...v}));
+
+        // Best savings month
+        const bestMonth = monthArr.filter(m=>m.inc>0).sort((a,b)=>b.net-a.net)[0];
+        if (bestMonth && bestMonth.net > 0) {
+          const [y, mo] = bestMonth.m.split('-');
+          out.push({
+            icon: '🌟',
+            title: 'Best savings month',
+            body: `${MONTHS_LONG[parseInt(mo)-1]} ${y} was your best — you kept ${fmt(bestMonth.net)} after expenses.`
+          });
+        }
+
+        // Worst month
+        const worstMonth = monthArr.filter(m=>m.inc>0 || m.exp>0).sort((a,b)=>a.net-b.net)[0];
+        if (worstMonth && worstMonth.net < 0) {
+          const [y, mo] = worstMonth.m.split('-');
+          out.push({
+            icon: '⚠️',
+            title: 'Toughest month',
+            body: `${MONTHS[parseInt(mo)-1]} ${y} was your roughest — expenses outpaced income by ${fmt(Math.abs(worstMonth.net))}.`
+          });
+        }
+
+        // Highest income month
+        const topIncMonth = monthArr.filter(m=>m.inc>0).sort((a,b)=>b.inc-a.inc)[0];
+        if (topIncMonth) {
+          const [y, mo] = topIncMonth.m.split('-');
+          out.push({
+            icon: '🎯',
+            title: 'Highest earning month',
+            body: `${MONTHS_LONG[parseInt(mo)-1]} ${y} brought in the most: ${fmt(topIncMonth.inc)}.`
+          });
+        }
+
+        // Highest expense month
+        const topExpMonth = monthArr.filter(m=>m.exp>0).sort((a,b)=>b.exp-a.exp)[0];
+        if (topExpMonth) {
+          const [y, mo] = topExpMonth.m.split('-');
+          out.push({
+            icon: '📊',
+            title: 'Biggest spending month',
+            body: `${MONTHS_LONG[parseInt(mo)-1]} ${y} was your highest-spending month at ${fmt(topExpMonth.exp)}.`
+          });
+        }
+
+        // Monthly averages
+        const activeMonths = monthArr.filter(m=>m.inc>0 || m.exp>0).length;
+        if (activeMonths > 0) {
+          out.push({
+            icon: '📅',
+            title: 'Monthly average',
+            body: `You average ${fmt(totalInc/activeMonths)} in and ${fmt(totalExp/activeMonths)} out per month across ${activeMonths} tracked months.`
+          });
+          out.push({
+            icon: '🧮',
+            title: 'Transactions per month',
+            body: `On average, you log ${(txs.length/activeMonths).toFixed(1)} transactions per month.`
+          });
+        }
+
+        // ============================================================
+        // SECTION 5 — Time-of-week and seasonal patterns
+        // ============================================================
+        const byDay = [0,0,0,0,0,0,0];
+        const byDayCount = [0,0,0,0,0,0,0];
+        for (const t of exp) {
+          const d = new Date(t.date + 'T12:00:00').getDay();
+          byDay[d] += t.amount;
+          byDayCount[d]++;
+        }
+        const maxDaySpend = Math.max(...byDay);
+        const maxDayIdx = byDay.indexOf(maxDaySpend);
+        if (maxDaySpend > 0) {
+          out.push({
+            icon: '🗓️',
+            title: 'Biggest spending day',
+            body: `${DAYS[maxDayIdx]}s are your most expensive day of the week — ${fmt(maxDaySpend)} across ${byDayCount[maxDayIdx]} transactions historically.`
+          });
+        }
+        const minDayIdx = byDayCount.map((c,i) => c > 0 ? byDay[i] : Infinity).indexOf(Math.min(...byDayCount.map((c,i) => c > 0 ? byDay[i] : Infinity)));
+        if (byDayCount[minDayIdx] > 0) {
+          out.push({
+            icon: '😴',
+            title: 'Quietest day',
+            body: `${DAYS[minDayIdx]}s are your lowest-spending day — just ${fmt(byDay[minDayIdx])} over ${byDayCount[minDayIdx]} transactions.`
+          });
+        }
+
+        // Weekend vs weekday
+        const weekendExp = exp.filter(t => {
+          const d = new Date(t.date + 'T12:00:00').getDay();
+          return d === 0 || d === 6;
+        }).reduce((a,b)=>a+b.amount, 0);
+        const weekdayExp = totalExp - weekendExp;
+        if (weekendExp > 0 && weekdayExp > 0) {
+          const ratio = (weekendExp / totalExp * 100).toFixed(0);
+          out.push({
+            icon: '🎉',
+            title: 'Weekend warriors',
+            body: `${ratio}% of your spending happens on weekends — ${fmt(weekendExp)} on Saturdays and Sundays all-time.`
+          });
+        }
+
+        // Most expensive month of the calendar year (seasonal)
+        const byMonthOfYear = new Array(12).fill(0);
+        for (const t of exp) {
+          const mo = parseInt(t.date.slice(5,7)) - 1;
+          byMonthOfYear[mo] += t.amount;
+        }
+        const maxSeasonIdx = byMonthOfYear.indexOf(Math.max(...byMonthOfYear));
+        out.push({
+          icon: '🎄',
+          title: 'Pricey time of year',
+          body: `${MONTHS_LONG[maxSeasonIdx]} tends to be your most expensive month — ${fmt(byMonthOfYear[maxSeasonIdx])} spent across all your ${MONTHS_LONG[maxSeasonIdx]}s combined.`
+        });
+
+        // ============================================================
+        // SECTION 6 — Streaks and tracking dedication
+        // ============================================================
         const dates = [...new Set(txs.map(t=>t.date))].sort();
         if (dates.length > 1) {
           const first = dates[0], last = dates[dates.length-1];
-          const days = Math.round((new Date(last) - new Date(first)) / (1000*60*60*24));
+          const days = Math.round((new Date(last + 'T12:00:00') - new Date(first + 'T12:00:00')) / (1000*60*60*24));
           out.push({
             icon: '⏱️',
-            title: 'Tracking streak',
-            body: `${days.toLocaleString()} days between your first and most recent transaction. That's dedication.`
+            title: 'Tracking dedication',
+            body: `${days.toLocaleString()} days between your first and most recent transaction. ${days > 730 ? 'Over two years of consistent tracking.' : days > 365 ? 'More than a full year.' : 'Keep it up.'}`
+          });
+
+          // Unique tracking days
+          out.push({
+            icon: '✅',
+            title: 'Days with activity',
+            body: `${dates.length.toLocaleString()} unique days have at least one transaction logged. That's ${(dates.length/days*100).toFixed(0)}% of the time span covered.`
+          });
+        }
+
+        // Longest streak of consecutive days with at least one transaction
+        if (dates.length > 2) {
+          let longest = 1, current = 1;
+          for (let i = 1; i < dates.length; i++) {
+            const d1 = new Date(dates[i-1] + 'T12:00:00');
+            const d2 = new Date(dates[i] + 'T12:00:00');
+            const diff = Math.round((d2 - d1) / (1000*60*60*24));
+            if (diff === 1) { current++; longest = Math.max(longest, current); }
+            else current = 1;
+          }
+          if (longest > 3) {
+            out.push({
+              icon: '🔥',
+              title: 'Longest logging streak',
+              body: `${longest} days in a row with at least one transaction logged. That's focus.`
+            });
+          }
+        }
+
+        // Busiest single day
+        const byExactDate = {};
+        for (const t of txs) byExactDate[t.date] = (byExactDate[t.date]||0) + 1;
+        const busiestDate = Object.entries(byExactDate).sort((a,b)=>b[1]-a[1])[0];
+        if (busiestDate && busiestDate[1] > 3) {
+          out.push({
+            icon: '📌',
+            title: 'Busiest single day',
+            body: `${busiestDate[0]} had ${busiestDate[1]} transactions logged — your most active day ever.`
+          });
+        }
+
+        // ============================================================
+        // SECTION 7 — Per-year reviews
+        // ============================================================
+        const years = {};
+        for (const t of txs) {
+          const y = t.date.slice(0,4);
+          if (!years[y]) years[y] = {inc:0, exp:0, sav:0, count:0};
+          if (t.type === 'Income') years[y].inc += t.amount;
+          else if (t.type === 'Expenses') years[y].exp += t.amount;
+          else if (t.type === 'Savings') years[y].sav += t.amount;
+          years[y].count++;
+        }
+        const yearArr = Object.entries(years).map(([y,v]) => ({y, net: v.inc-v.exp, ...v}));
+
+        // Best year
+        const bestYear = [...yearArr].filter(y=>y.inc>0).sort((a,b)=>b.net-a.net)[0];
+        if (bestYear && yearArr.length > 1) {
+          out.push({
+            icon: '🏅',
+            title: 'Best financial year',
+            body: `${bestYear.y} was your strongest year — ${fmt(bestYear.net)} kept after expenses.`
+          });
+        }
+
+        // Most active year
+        const mostActiveYear = [...yearArr].sort((a,b)=>b.count-a.count)[0];
+        if (mostActiveYear) {
+          out.push({
+            icon: '📆',
+            title: 'Busiest year',
+            body: `${mostActiveYear.y} was your most active — ${mostActiveYear.count.toLocaleString()} transactions logged across the year.`
+          });
+        }
+
+        // Year-over-year comparison (if we have multiple full years)
+        if (yearArr.length >= 2) {
+          const sorted = [...yearArr].sort((a,b) => a.y.localeCompare(b.y));
+          const last = sorted[sorted.length-1];
+          const prev = sorted[sorted.length-2];
+          if (prev.exp > 0 && last.exp > 0) {
+            const pct = ((last.exp - prev.exp) / prev.exp * 100);
+            const verb = pct > 0 ? 'up' : 'down';
+            out.push({
+              icon: '📉',
+              title: 'Year-over-year spending',
+              body: `Your ${last.y} spending is ${verb} ${Math.abs(pct).toFixed(0)}% from ${prev.y} — ${fmt(Math.abs(last.exp - prev.exp))} ${pct > 0 ? 'more' : 'less'}.`
+            });
+          }
+        }
+
+        // ============================================================
+        // SECTION 8 — Fun and unexpected patterns
+        // ============================================================
+        // Round number spots
+        const roundTxs = txs.filter(t => t.amount % 1 === 0 && t.amount >= 10);
+        if (roundTxs.length > 10) {
+          out.push({
+            icon: '🎯',
+            title: 'Round numbers',
+            body: `${roundTxs.length.toLocaleString()} of your transactions are for exactly a round dollar amount. You apparently like whole numbers.`
+          });
+        }
+
+        // Highest single-day expense total
+        const expByDate = {};
+        for (const t of exp) expByDate[t.date] = (expByDate[t.date]||0) + t.amount;
+        const splurgeDate = Object.entries(expByDate).sort((a,b)=>b[1]-a[1])[0];
+        if (splurgeDate) {
+          out.push({
+            icon: '💥',
+            title: 'Biggest single-day spending',
+            body: `${splurgeDate[0]} saw ${fmt(splurgeDate[1])} in expenses in one day — your biggest spend day ever.`
+          });
+        }
+
+        // Number of unique transaction descriptions
+        const uniqueDetails = new Set(txs.filter(t=>t.details).map(t=>t.details.toLowerCase().trim())).size;
+        if (uniqueDetails > 20) {
+          out.push({
+            icon: '🧾',
+            title: 'Unique merchants',
+            body: `${uniqueDetails.toLocaleString()} different transaction descriptions — you've shopped a lot of places.`
+          });
+        }
+
+        // Median transaction amount
+        const amounts = [...txs].map(t=>t.amount).sort((a,b)=>a-b);
+        const median = amounts[Math.floor(amounts.length/2)];
+        out.push({
+          icon: '📏',
+          title: 'Typical transaction',
+          body: `Your median transaction is ${fmt(median)} — half your entries are above, half below.`
+        });
+
+        // Days since last expense
+        if (newestTx) {
+          const daysSinceLast = Math.round((new Date() - new Date(newestTx.date + 'T12:00:00')) / (1000*60*60*24));
+          if (daysSinceLast >= 0 && daysSinceLast < 60) {
+            const msg = daysSinceLast === 0 ? 'Your last transaction was logged today.' :
+                        daysSinceLast === 1 ? 'Your last transaction was yesterday.' :
+                        `${daysSinceLast} days since your most recent transaction.`;
+            out.push({
+              icon: '⏳',
+              title: 'Recency',
+              body: msg
+            });
+          }
+        }
+
+        // ============================================================
+        // SECTION 9 — User-attribution facts (who logged more)
+        // ============================================================
+        const byUser = {};
+        for (const t of txs) {
+          // This only works if transactions have a created_by-derived name,
+          // which they don't in the current app shape. Skip gracefully.
+          const u = t.createdByName;
+          if (u) byUser[u] = (byUser[u]||0) + 1;
+        }
+        const userEntries = Object.entries(byUser);
+        if (userEntries.length > 1) {
+          const [top, ...rest] = userEntries.sort((a,b)=>b[1]-a[1]);
+          out.push({
+            icon: '✍️',
+            title: 'Who logs the most',
+            body: `${top[0]} has logged ${top[1].toLocaleString()} transactions — the top contributor.`
           });
         }
 
         return out;
       }, [txs]);
 
-      // Rotate every 10 minutes, starting from a seed based on the current 10-min window.
-      const [, force] = useState(0);
+      // State: which fact index is shown. Randomized on mount so each
+      // visit feels fresh. Users can click "Another" to cycle manually.
+      const [idx, setIdx] = useState(() => Math.floor(Math.random() * 999));
+
+      // When txs change meaningfully (user adds a new transaction), pick
+      // a new random fact to keep things fresh.
       useEffect(() => {
-        const id = setInterval(() => force(n => n+1), 60 * 1000); // re-check every minute
-        return () => clearInterval(id);
-      }, []);
+        if (facts.length > 0) {
+          setIdx(i => i + 1);  // advance to next
+        }
+      }, [txs.length]);
 
       if (!facts.length) return null;
-      const windowIdx = Math.floor(Date.now() / (10 * 60 * 1000));
-      const fact = facts[windowIdx % facts.length];
+      const fact = facts[idx % facts.length];
 
       return (
         <div className="fact-card">
@@ -1097,7 +1541,17 @@
             <div className="fact-title">Did you know · {fact.title}</div>
             <div className="fact-text">{fact.body}</div>
           </div>
-          <div className="fact-hint">rotates every 10 min</div>
+          <button
+            className="fact-cycle"
+            onClick={() => setIdx(i => i + 1)}
+            title="Show another fact"
+            aria-label="Show another fact"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 1 1-3-6.7"/>
+              <path d="M21 4v5h-5"/>
+            </svg>
+          </button>
         </div>
       );
     }
@@ -1126,7 +1580,7 @@
       );
     }
 
-    Object.assign(window, { Bar, Donut, Spark, AllocationStrip, FactCard, GreetingCard, LastEditedBy, ACCENTS, fmt, fmtCents, fmtSigned });
+    Object.assign(window, { Bar, Donut, Spark, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtSigned });
   
 })();
 </script>
@@ -1454,7 +1908,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, LastEditedBy, GreetingCard,
+    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -2121,6 +2575,9 @@
             </div>
           </div>
 
+          {/* Personalized greeting line with time-of-day emoji */}
+          <GreetingLine />
+
           {/* Hero */}
           <div className="hero">
             <div className="card feature">
@@ -2324,8 +2781,9 @@
                 </div>
               </div>
 
-              {/* Personalized greeting */}
-              <GreetingCard txs={txs} view={view} year={year} monthIdx={monthIdx}/>
+              {/* Fun fact — rotates through 40+ insights, click the
+                   refresh icon to cycle to another one */}
+              <FactCard txs={txs}/>
             </div>
 
             {/* Side panel */}
