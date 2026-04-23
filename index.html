@@ -248,6 +248,21 @@
   .modal-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
+  /* fast-entry command bar — slides down from top, opened with / */
+  .fast-bar-back { position: fixed; inset: 0; background: rgba(20,18,14,0.3); backdrop-filter: blur(3px); z-index: 250; display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; animation: fastBarFade 0.15s ease-out; }
+  .fast-bar { width: 600px; max-width: calc(100vw - 40px); background: var(--bg-elev); border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 20px 60px -10px rgba(0,0,0,0.3); padding: 6px; animation: fastBarSlide 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
+  .fast-bar-input { width: 100%; padding: 16px 18px; border: 0; background: transparent; font: inherit; font-size: 17px; color: inherit; outline: none; box-sizing: border-box; }
+  .fast-bar-input::placeholder { color: var(--ink-3); }
+  .fast-bar-preview { padding: 12px 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .fast-bar-preview .pill { padding: 3px 9px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 11px; font-weight: 500; }
+  .fast-bar-preview .pill.cat { background: var(--sage-soft); border-color: transparent; }
+  .fast-bar-preview .pill.amount { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--ink); }
+  .fast-bar-preview .pill.muted { opacity: 0.5; font-style: italic; }
+  .fast-bar-hint { padding: 8px 18px 10px; font-size: 11px; color: var(--ink-3); border-top: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .fast-bar-hint kbd { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+  @keyframes fastBarFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fastBarSlide { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+
   /* tweaks panel */
   .tweaks-panel { position: fixed; bottom: 20px; right: 20px; width: 280px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: 0 10px 40px -10px rgba(0,0,0,0.15); z-index: 100; display: none; }
   .tweaks-panel.open { display: block; }
@@ -1006,26 +1021,54 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    var TxModal = function({ open, onClose, onSave, categories, defaultDate }) {
+    var TxModal = function({ open, onClose, onSave, categories, defaultDate, defaultType, defaultCategory, existingTx, prefillAmount, prefillDetails }) {
       const { useState, useEffect } = React;
+      const isEditing = !!existingTx;
       const [form, setForm] = useState({
         date: defaultDate, type: 'Expenses', category: categories.Expenses[0] || '', amount: '', details: ''
       });
       useEffect(()=>{
-        if (open) setForm(f => ({...f, date: defaultDate, category: categories[f.type]?.[0] || ''}));
-      }, [open, defaultDate]);
+        if (!open) return;
+        if (existingTx) {
+          // Edit mode: pre-fill with the existing transaction's values
+          setForm({
+            date:     existingTx.date,
+            type:     existingTx.type,
+            category: existingTx.category,
+            amount:   String(existingTx.amount),
+            details:  existingTx.details || ''
+          });
+        } else {
+          // Add mode: use smart defaults + any prefill from fast entry
+          const type = defaultType || 'Expenses';
+          const cat  = defaultCategory && categories[type]?.includes(defaultCategory)
+                     ? defaultCategory
+                     : (categories[type]?.[0] || '');
+          setForm({
+            date: defaultDate,
+            type,
+            category: cat,
+            amount: prefillAmount != null ? String(prefillAmount) : '',
+            details: prefillDetails || ''
+          });
+        }
+      }, [open, defaultDate, defaultType, defaultCategory, existingTx, prefillAmount, prefillDetails]);
       if (!open) return null;
       const submit = () => {
         const amt = parseFloat(form.amount);
         if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
         if (!form.category) { alert('Pick a category'); return; }
-        onSave({...form, amount: amt, id: 't' + Date.now()});
+        if (isEditing) {
+          onSave({...form, amount: amt, id: existingTx.id});
+        } else {
+          onSave({...form, amount: amt, id: 't' + Date.now()});
+        }
         onClose();
       };
       return (
         <div className="modal-back" onClick={onClose}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
-            <h3 className="serif">Add transaction</h3>
+            <h3 className="serif">{isEditing ? 'Edit transaction' : 'Add transaction'}</h3>
             <div className="modal-row-2">
               <div className="modal-row">
                 <label>Date</label>
@@ -1062,7 +1105,7 @@
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={submit}>Add transaction</button>
+              <button className="btn btn-primary" onClick={submit}>{isEditing ? 'Save changes' : 'Add transaction'}</button>
             </div>
           </div>
         </div>
@@ -1096,6 +1139,186 @@
       );
     };
     window.ConfirmModal = ConfirmModal;
+
+    // ---------------------------------------------------------
+    // Fast-entry command bar
+    // ---------------------------------------------------------
+    // Parses a single line like:
+    //   "4/25/26 wegmans 35.78"
+    //   "35.78 wegmans"
+    //   "dos tacos 4/25/26 45.28 dining"
+    //   "starbucks 15"
+    // Tokens are extracted in order: dates, amounts, then category overrides.
+    // Whatever remains becomes the merchant/details, which we then use to
+    // guess a category from your transaction history.
+    //
+    // If parsing fails to find an amount (the only required field), we fall
+    // back to opening the full TxModal pre-filled with whatever we did parse.
+    var parseFastEntry = function(input, txs, categoriesByType) {
+      const text = (input || '').trim();
+      if (!text) return null;
+      let tokens = text.split(/\s+/);
+
+      // Build a flat list of all category names with their type, lowercase
+      // for matching.
+      const catLookup = {};
+      for (const type of ['Income', 'Expenses', 'Savings']) {
+        for (const c of (categoriesByType[type] || [])) {
+          catLookup[c.toLowerCase()] = { name: c, type };
+        }
+      }
+
+      // Pull out date tokens (MM/DD/YY or MM/DD/YYYY or YYYY-MM-DD)
+      let date = null;
+      tokens = tokens.filter(tok => {
+        if (date) return true;
+        // YYYY-MM-DD
+        let m = tok.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (m) { date = `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; return false; }
+        // M/D/YY or M/D/YYYY
+        m = tok.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+        if (m) {
+          let yr = m[3];
+          if (yr.length === 2) yr = '20' + yr;
+          date = `${yr}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+          return false;
+        }
+        return true;
+      });
+
+      // Pull out amount (first numeric token, optionally with $ or .)
+      let amount = null;
+      tokens = tokens.filter(tok => {
+        if (amount !== null) return true;
+        const cleaned = tok.replace(/^\$/, '');
+        if (/^\d+(\.\d{1,2})?$/.test(cleaned)) {
+          amount = parseFloat(cleaned);
+          return false;
+        }
+        return true;
+      });
+
+      // Look for an explicit category token (matches any known category name)
+      let categoryOverride = null;
+      tokens = tokens.filter(tok => {
+        if (categoryOverride) return true;
+        const hit = catLookup[tok.toLowerCase()];
+        if (hit) { categoryOverride = hit; return false; }
+        return true;
+      });
+
+      // Whatever's left is the merchant/details
+      const details = tokens.join(' ').trim();
+
+      // Smart category guess from history: find most common category for
+      // transactions whose details contain the same merchant text
+      let guessedCategory = null;
+      if (!categoryOverride && details) {
+        const needle = details.toLowerCase();
+        const matches = txs.filter(t => (t.details || '').toLowerCase().includes(needle));
+        if (matches.length > 0) {
+          const counts = {};
+          for (const t of matches) {
+            const key = t.type + '|' + t.category;
+            counts[key] = (counts[key] || 0) + 1;
+          }
+          const top = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
+          if (top) {
+            const [type, name] = top[0].split('|');
+            guessedCategory = { name, type };
+          }
+        }
+      }
+
+      const cat = categoryOverride || guessedCategory;
+
+      return {
+        date,                 // null if not provided (defaults to today)
+        amount,               // null if not provided (parser failure)
+        details,
+        category: cat?.name || null,
+        type: cat?.type || null,
+        complete: amount !== null && cat !== null,
+        wasGuessed: !categoryOverride && !!guessedCategory
+      };
+    };
+
+    var FastEntryBar = function({ open, onClose, onSave, onFallback, categoriesByType, txs }) {
+      const { useState, useEffect, useRef } = React;
+      const [text, setText] = useState('');
+      const inputRef = useRef(null);
+
+      useEffect(() => {
+        if (open) {
+          setText('');
+          // Slight delay so the input exists when we focus
+          setTimeout(() => inputRef.current?.focus(), 20);
+        }
+      }, [open]);
+
+      // Live preview based on what user has typed so far
+      const preview = text ? parseFastEntry(text, txs, categoriesByType) : null;
+
+      const submit = () => {
+        if (!text.trim()) return;
+        const parsed = parseFastEntry(text, txs, categoriesByType);
+        if (!parsed) return;
+        if (parsed.complete) {
+          // Have everything we need — save directly and close
+          const today = new Date();
+          const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+          onSave({
+            id: 't' + Date.now(),
+            date: parsed.date || todayStr,
+            type: parsed.type,
+            category: parsed.category,
+            amount: parsed.amount,
+            details: parsed.details
+          });
+          onClose();
+        } else {
+          // Missing something — open the full modal pre-filled with what we got
+          onFallback(parsed);
+          onClose();
+        }
+      };
+
+      if (!open) return null;
+      return (
+        <div className="fast-bar-back" onClick={onClose}>
+          <div className="fast-bar" onClick={e=>e.stopPropagation()}>
+            <input
+              ref={inputRef}
+              className="fast-bar-input"
+              type="text"
+              placeholder="35.78 wegmans   ·   4/25/26 dos tacos 45 dining   ·   starbucks 15"
+              value={text}
+              onChange={e=>setText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+                if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+              }}
+            />
+            {preview && (preview.date || preview.amount !== null || preview.category || preview.details) && (
+              <div className="fast-bar-preview">
+                {preview.date && <span className="pill">📅 {preview.date}</span>}
+                {!preview.date && <span className="pill muted">today</span>}
+                {preview.amount !== null && <span className="pill amount">${preview.amount.toFixed(2)}</span>}
+                {preview.amount === null && <span className="pill muted">amount?</span>}
+                {preview.category && <span className="pill cat">{preview.category}{preview.wasGuessed ? ' (guessed)' : ''}</span>}
+                {!preview.category && preview.details && <span className="pill muted">no category match</span>}
+                {preview.details && <span style={{color:'var(--ink-3)'}}>{preview.details}</span>}
+              </div>
+            )}
+            <div className="fast-bar-hint">
+              <span><kbd>Enter</kbd> save · <kbd>Esc</kbd> close</span>
+              <span style={{color:'var(--ink-3)'}}>tip: include a date, amount, and merchant or category</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    window.FastEntryBar = FastEntryBar;
   
 })();
 </script>
@@ -1104,7 +1327,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, LastEditedBy,
+    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, LastEditedBy,
             colorFor, glyphFor, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -1232,6 +1455,29 @@
         return () => { window.__reactBridge = null; };
       }, []);
 
+      // Global keyboard shortcuts. Only fire when not already typing in
+      // an input/textarea/contenteditable, so they don't interrupt edits.
+      useEffect(() => {
+        const handler = (e) => {
+          // Ignore if a modal is already open or if typing in a field
+          const tag = (e.target.tagName || '').toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+          if (e.target.isContentEditable) return;
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+          if (e.key === '/') {
+            e.preventDefault();
+            setCmdOpen(true);
+          } else if (e.key === 'n' || e.key === 'N') {
+            e.preventDefault();
+            setEditingTx(null);
+            setModalOpen(true);
+          }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, []);
+
       // Derive available years from transactions
       const years = useMemo(() => {
         const s = new Set(txs.map(t => parseInt(t.date.slice(0,4))).filter(y => !isNaN(y)));
@@ -1272,6 +1518,23 @@
         ];
       }, [budgetsByYear, year]);
       const [modalOpen, setModalOpen] = useState(false);
+      // When set, the TxModal opens in "edit" mode for this transaction.
+      // Null = add mode.
+      const [editingTx, setEditingTx] = useState(null);
+      // When the fast-entry bar has a partial parse, it stuffs the
+      // partial values here and opens the full modal so the user can
+      // finish. Cleared when the modal closes.
+      const [cmdPrefill, setCmdPrefill] = useState(null);
+      // Smart defaults for the Add modal — remember what you used last
+      // in this session so the next entry pre-fills correctly.
+      // Resets on reload (which is what you asked for — per-session).
+      const [lastUsed, setLastUsed] = useState({
+        date: null,       // last date entered (for batch entry)
+        type: null,       // last type used
+        category: null    // last category used
+      });
+      // Fast-entry command bar: opened by pressing /
+      const [cmdOpen, setCmdOpen] = useState(false);
       // Confirm-dialog state. Set to { title, message, onConfirm } to show;
       // null to hide.
       const [confirmState, setConfirmState] = useState(null);
@@ -1472,6 +1735,8 @@
       const addTx = (tx) => {
         // Optimistic insert with temp id, then swap in real UUID once saved
         setTxs(prev => [...prev, tx]);
+        // Remember the values for next entry
+        setLastUsed({ date: tx.date, type: tx.type, category: tx.category });
         const y = parseInt(tx.date.slice(0,4));
         const m = parseInt(tx.date.slice(5,7)) - 1;
         if (!isNaN(y)) setYear(y);
@@ -1491,6 +1756,29 @@
           }).catch(err => {
             console.error('Add failed, rolling back:', err);
             setTxs(prev => prev.filter(t => t.id !== tx.id));
+            alert('Save failed: ' + err.message);
+          });
+        }
+      };
+      const updateTx = (tx) => {
+        // Optimistic update with rollback on error
+        const snapshot = txs.find(t => t.id === tx.id);
+        setTxs(prev => prev.map(t => t.id === tx.id
+          ? { id: tx.id, date: tx.date, type: tx.type, category: tx.category, amount: tx.amount, details: tx.details || '' }
+          : t));
+        setLastUsed({ date: tx.date, type: tx.type, category: tx.category });
+
+        if (window.__SupaStore) {
+          window.__SupaStore.updateTx({
+            id: tx.id,
+            date: tx.date,
+            type: tx.type,
+            categoryName: tx.category,
+            amount: tx.amount,
+            details: tx.details || ''
+          }).catch(err => {
+            console.error('Update failed, rolling back:', err);
+            if (snapshot) setTxs(prev => prev.map(t => t.id === tx.id ? snapshot : t));
             alert('Save failed: ' + err.message);
           });
         }
@@ -1613,8 +1901,30 @@
 
       return (
         <div className="app" data-screen-label="01 Budget">
-          <TxModal open={modalOpen} onClose={()=>setModalOpen(false)} onSave={addTx}
-            categories={categoriesByType} defaultDate={defaultTxDate}/>
+          <TxModal
+            open={modalOpen}
+            onClose={() => { setModalOpen(false); setEditingTx(null); setCmdPrefill(null); }}
+            onSave={editingTx ? updateTx : addTx}
+            categories={categoriesByType}
+            defaultDate={cmdPrefill?.date || lastUsed.date || defaultTxDate}
+            defaultType={cmdPrefill?.type || lastUsed.type}
+            defaultCategory={cmdPrefill?.category || lastUsed.category}
+            prefillAmount={cmdPrefill?.amount}
+            prefillDetails={cmdPrefill?.details}
+            existingTx={editingTx}
+          />
+          <FastEntryBar
+            open={cmdOpen}
+            onClose={() => setCmdOpen(false)}
+            onSave={addTx}
+            onFallback={(parsed) => {
+              setCmdPrefill(parsed);
+              setEditingTx(null);
+              setModalOpen(true);
+            }}
+            categoriesByType={categoriesByType}
+            txs={txs}
+          />
           <ConfirmModal
             open={!!confirmState}
             title={confirmState?.title}
@@ -1856,7 +2166,10 @@
                     </div>
                   )}
                   {visibleTxs.slice(0, txLimit).map(t => (
-                    <div key={t.id} className="tx-row">
+                    <div key={t.id} className="tx-row"
+                      onClick={() => { setEditingTx(t); setModalOpen(true); }}
+                      style={{cursor:'pointer'}}
+                      title="Click to edit">
                       <span className="tx-date num">{t.date.slice(5)}</span>
                       <span className={"tx-type " + (t.type==='Income'?'income':t.type==='Expenses'?'expense':'')}
                         style={t.type==='Savings'?{background:'var(--blue-soft)',color:'var(--blue-ink)'}:undefined}>
@@ -1867,7 +2180,9 @@
                       <span className={"tx-amount num " + (t.type==='Income'?'income':'expense')}>
                         {t.type==='Income' ? '+' : '−'}{fmtCents(t.amount)}
                       </span>
-                      <button className="delete-btn" onClick={()=>deleteTx(t.id)} style={{opacity:0.6}} title="Delete">
+                      <button className="delete-btn"
+                        onClick={(e) => { e.stopPropagation(); deleteTx(t.id); }}
+                        style={{opacity:0.6}} title="Delete">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
                       </button>
                     </div>

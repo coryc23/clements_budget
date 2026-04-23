@@ -264,6 +264,23 @@
       return data.id;
     },
 
+    async updateTx({ id, date, type, categoryName, amount, details }) {
+      const cat = cache.catsByName[type + '|' + categoryName];
+      if (!cat) throw new Error(`Category not found: ${type} / ${categoryName}`);
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          date: date,
+          type: type,
+          category_id: cat.id,
+          amount: amount,
+          details: details || ''
+        })
+        .eq('id', id);
+      if (error) throw error;
+      bumpLastEdited();
+    },
+
     async deleteTx(id) {
       const { error } = await supabase
         .from('transactions')
@@ -372,6 +389,11 @@
     const id = await _addTx.call(this, args);
     markWritten('tx:' + id);
     return id;
+  };
+  const _updateTx = SupaStore.updateTx;
+  SupaStore.updateTx = async function(args) {
+    markWritten('tx:' + args.id);
+    return _updateTx.call(this, args);
   };
   const _deleteTx = SupaStore.deleteTx;
   SupaStore.deleteTx = async function(id) {
