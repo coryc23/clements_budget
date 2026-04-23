@@ -306,11 +306,55 @@
 </style>
 </head>
 <body>
+  <!-- Instant loading state shown BEFORE CDN scripts download. If React or
+       Babel are slow to arrive from the CDN, the user still sees the
+       animated brand mark instead of a blank cream screen. This is removed
+       by supabase-client.js once it's ready to take over. -->
+  <div id="boot-loader">
+    <style>
+      #boot-loader {
+        position: fixed; inset: 0; z-index: 10000;
+        background: #faf7f2;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      }
+      #boot-loader .mark { width: 56px; height: 56px; margin-bottom: 16px; }
+      #boot-loader .text {
+        font-family: Georgia, 'Fraunces', serif;
+        font-style: italic; color: #857f74; font-size: 14px;
+      }
+      #boot-loader .flow { stroke-dasharray: 40; stroke-dashoffset: 40; animation: bl-draw 1.2s ease-out infinite; }
+      #boot-loader .flow-1 { animation-delay: 0s; }
+      #boot-loader .flow-2 { animation-delay: 0.2s; }
+      #boot-loader .flow-3 { animation-delay: 0.4s; }
+      @keyframes bl-draw {
+        0% { stroke-dashoffset: 40; }
+        50% { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -40; }
+      }
+    </style>
+    <svg class="mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path class="flow flow-1" d="M20 18 Q12 14 6 8"  stroke="#8ab697" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+      <path class="flow flow-2" d="M20 18 Q20 10 20 4"  stroke="#8cabcf" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+      <path class="flow flow-3" d="M20 18 Q28 14 34 8"  stroke="#d9a441" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+      <circle cx="6" cy="8"  r="2" fill="#8ab697"/>
+      <circle cx="20" cy="4" r="2" fill="#8cabcf"/>
+      <circle cx="34" cy="8" r="2" fill="#d9a441"/>
+      <path d="M15 15 L17 12 L23 12 L25 15 Z" fill="#4a463f"/>
+      <path d="M14 16 Q12 18 12 24 Q12 34 20 36 Q28 34 28 24 Q28 18 26 16 Z"
+            fill="#c67f67" stroke="#1f1d1a" stroke-width="0.8" stroke-linejoin="round"/>
+      <text x="20" y="29" text-anchor="middle"
+            font-family="Georgia, serif" font-size="11" font-weight="600" fill="#fff">$</text>
+    </svg>
+    <div class="text">Getting things ready…</div>
+  </div>
+
   <div id="root"></div>
 
-  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {

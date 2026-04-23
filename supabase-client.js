@@ -182,6 +182,11 @@
   `;
   document.body.appendChild(overlay);
 
+  // The boot loader was shown by index.html before any scripts loaded,
+  // to avoid a blank cream screen while CDN scripts downloaded. Now that
+  // our overlay is up, remove it.
+  document.getElementById('boot-loader')?.remove();
+
   // Set a time-of-day greeting on the login screen
   (() => {
     const h = new Date().getHours();
