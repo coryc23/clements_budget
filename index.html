@@ -130,7 +130,7 @@
   .btn:hover { border-color: var(--line-strong); transform: translateY(-1px); box-shadow: 0 2px 8px -3px rgba(30, 25, 20, 0.08); }
   .btn:active { transform: translateY(0); box-shadow: none; }
   .btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-  .btn-primary:hover { background: #000; transform: translateY(-1px); box-shadow: 0 2px 8px -3px rgba(0, 0, 0, 0.25); }
+  .btn-primary:hover { background: var(--ink); opacity: 0.85; transform: translateY(-1px); box-shadow: 0 2px 8px -3px rgba(0, 0, 0, 0.25); }
   .btn svg { display: block; }
 
   /* hero */
@@ -230,7 +230,7 @@
 
   .editable { background: transparent; border: 1px solid transparent; padding: 3px 6px; border-radius: 6px; text-align: right; width: 90px; transition: all 0.15s; }
   .editable:hover { border-color: var(--line); background: var(--bg); }
-  .editable:focus { outline: none; border-color: var(--ink); background: #fff; box-shadow: 0 0 0 3px var(--blue-soft); }
+  .editable:focus { outline: none; border-color: var(--ink); background: var(--bg-elev); box-shadow: 0 0 0 3px var(--blue-soft); }
 
   .bar-cell { min-width: 180px; }
   .bar-wrap { display: flex; align-items: center; gap: 10px; }
@@ -277,7 +277,7 @@
 
   .tx-list { max-height: 480px; overflow-y: auto; }
   .tx-row { display: grid; grid-template-columns: 96px 90px 1fr 1fr 100px auto; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--line); align-items: center; font-size: 13px; transition: background 0.15s; }
-  .tx-row:hover { background: #fdfbf6; }
+  .tx-row:hover { background: var(--bg-soft); }
   .tx-row:last-child { border-bottom: 0; }
   /* Newly-added transactions (identified by ids starting with 't') fade in */
   .tx-row.tx-new { animation: tx-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -308,7 +308,7 @@
   .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; min-width: 0; }
   .modal-row label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; }
   .modal-row input, .modal-row select { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: inherit; }
-  .modal-row input:focus, .modal-row select:focus { outline: none; border-color: var(--ink); background: #fff; box-shadow: 0 0 0 3px var(--blue-soft); }
+  .modal-row input:focus, .modal-row select:focus { outline: none; border-color: var(--ink); background: var(--bg-elev); box-shadow: 0 0 0 3px var(--blue-soft); }
   .modal-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
