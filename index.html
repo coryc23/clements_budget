@@ -225,6 +225,10 @@
 
   .cat-cell { display: flex; align-items: center; gap: 10px; }
   .cat-chip { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+  /* Emoji variant: no background, larger glyph */
+  .cat-chip.cat-chip-emoji { background: transparent !important; color: inherit !important; font-size: 18px; line-height: 1; }
+  /* Emoji prefix in transaction rows */
+  .tx-cat-emoji { font-size: 14px; line-height: 1; display: inline-block; min-width: 18px; text-align: center; }
   .cat-name { font-weight: 500; }
   .cat-tag { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 
@@ -451,7 +455,54 @@
       // All expense categories share a single accent so the chips read as one group.
       return 'terra';
     }
-    function glyphFor(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
+    // Emoji-based glyphs for categories. Falls back to first letter for
+    // any category not in the map (so newly-added categories still get
+    // a sensible chip until you assign one).
+    const CATEGORY_EMOJI = {
+      // Income
+      'Brittany': '💵',
+      'Cory 1': '💵',
+      'Cory 2': '💵',
+      'Other': '💵',
+      // Expenses
+      'Cal': '👶',
+      'Car Insurance': '🛡️',
+      'Car Payment': '🚙',
+      'Cell Phone': '📱',
+      'Dining': '🍽️',
+      'Gas': '⛽',
+      'Gifts': '🎁',
+      'Groceries': '🛒',
+      'Healthcare': '🏥',
+      'Misc': '📌',
+      'Pets': '🐶',
+      'Pods': '🚭',
+      'Rent': '🏠',
+      'Renters Insurance': '🔑',
+      'Shopping': '🛍️',
+      'Starbucks': '☕',
+      'Subscriptions': '🔁',
+      'Travel': '✈️',
+      'Utilities': '💡',
+      'Wholesale': '🏬',
+      // Savings
+      'Brokerage Account': '📈',
+      'Roth IRA': '🏦',
+      'Savings Account': '💰',
+      'Traditional IRA': '🏦'
+    };
+    function glyphFor(name) {
+      const trimmed = (name || '').trim();
+      if (CATEGORY_EMOJI[trimmed]) return CATEGORY_EMOJI[trimmed];
+      // Fallback: first letter of the name, uppercase
+      return (trimmed || '?').charAt(0).toUpperCase();
+    }
+    // Returns true if a category's glyph is an emoji (vs a fallback letter).
+    // Used to style the chip differently — emojis don't need a colored
+    // background since they bring their own color.
+    function isEmojiGlyph(g) {
+      return g && g.length > 1 || /[\u{1F300}-\u{1FAFF}]|[\u{2600}-\u{27BF}]/u.test(g || '');
+    }
     function tagFor(months) {
       const nonzero = months.filter(m => m !== 0);
       if (nonzero.length === 12 && nonzero.every(v => v === nonzero[0])) return 'fixed';
@@ -461,6 +512,7 @@
     }
     window.colorFor = colorFor;
     window.glyphFor = glyphFor;
+    window.isEmojiGlyph = isEmojiGlyph;
     window.tagFor = tagFor;
     window.YEAR = YEAR;
     window.MONTHS = MONTHS;
@@ -1930,7 +1982,7 @@
 /*__IIFE_WRAPPED__*/ (() => {
 
     const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, LastEditedBy, GreetingCard, GreetingLine,
-            colorFor, glyphFor, tagFor, YEAR, MONTHS, MONTHS_LONG,
+            colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
     const TWEAK_DEFAULTS = window.TWEAK_DEFAULTS || { theme: 'warm' };
@@ -1947,7 +1999,10 @@
         <tr>
           <td>
             <div className="cat-cell">
-              <span className="cat-chip" style={{background: acc.bg, color: acc.fg}}>{row.glyph}</span>
+              <span
+                className={"cat-chip" + (isEmojiGlyph(row.glyph) ? ' cat-chip-emoji' : '')}
+                style={isEmojiGlyph(row.glyph) ? undefined : {background: acc.bg, color: acc.fg}}
+              >{row.glyph}</span>
               <div>
                 <div className="cat-name">{row.name}</div>
                 <div className="cat-tag">{row.tag}</div>
@@ -2801,7 +2856,10 @@
                         style={t.type==='Savings'?{background:'var(--blue-soft)',color:'var(--blue-ink)'}:undefined}>
                         {t.type}
                       </span>
-                      <span style={{fontWeight:500}}>{t.category}</span>
+                      <span style={{fontWeight:500, display:'inline-flex', alignItems:'center', gap:6}}>
+                        <span className="tx-cat-emoji" aria-hidden="true">{glyphFor(t.category)}</span>
+                        <span>{t.category}</span>
+                      </span>
                       <span className="tx-details">{t.details || '—'}</span>
                       <span className={"tx-amount num " + (t.type==='Income'?'income':'expense')}>
                         {t.type==='Income' ? '+' : '−'}{fmtCents(t.amount)}
