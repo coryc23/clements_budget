@@ -1007,6 +1007,28 @@
 
     var Spark = function({ data, color="var(--sage)" }) {
       const w = 300, h = 64, pad = 4;
+      // Edge cases: with 0 or 1 points there's no trend to draw.
+      // For 1 point, render a flat horizontal baseline so users can
+      // see the category "has data" — just not enough history yet.
+      if (!data || data.length === 0) {
+        return (
+          <svg className="spark" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+            <line x1={pad} y1={h/2} x2={w-pad} y2={h/2}
+                  stroke={color} strokeWidth="1" strokeDasharray="3 3" opacity="0.3"/>
+          </svg>
+        );
+      }
+      if (data.length === 1) {
+        // Single point — flat line at midheight, with a dot at the start
+        const yMid = h/2;
+        return (
+          <svg className="spark" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+            <line x1={pad} y1={yMid} x2={w-pad} y2={yMid}
+                  stroke={color} strokeWidth="2" opacity="0.4"/>
+            <circle cx={pad+2} cy={yMid} r="2.5" fill={color}/>
+          </svg>
+        );
+      }
       const min = Math.min(...data), max = Math.max(...data);
       const rng = max - min || 1;
       const pts = data.map((v,i)=>{
