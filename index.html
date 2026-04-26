@@ -2686,52 +2686,7 @@
       // Expose state setters to supabase-client.js so it can apply
       // realtime updates from the other user. See the Realtime section
       // of supabase-client.js for the event handlers that call these.
-      // Stable ref so the bridge handlers (which run outside React's
-      // render lifecycle) can access the latest state.
-      const bridgeRef = React.useRef({});
-      bridgeRef.current = { closeouts, txs, budgetsByYear, year, monthIdx };
-
-      useEffect(() => {
-        window.__reactBridge = {
-          setTxs,
-          setBudgetsByYear,
-          extendCategoryLists: (type, name) => {
-            if (type === 'Income'   && !INCOME_CATS.includes(name))  INCOME_CATS.push(name);
-            if (type === 'Expenses' && !EXPENSE_CATS.includes(name)) EXPENSE_CATS.push(name);
-            if (type === 'Savings'  && !SAVINGS_CATS.includes(name)) SAVINGS_CATS.push(name);
-          },
-          // Called by supabase-client when the OTHER user closes out a
-          // month. Adds it to local state and fires the celebration on
-          // this session so both screens see it.
-          applyCloseoutInsert: ({ year, month, closed_at, closed_by, closed_by_name, isRemote }) => {
-            const mIdx = month - 1;
-            setCloseouts(prev => {
-              if (prev.some(c => c.year === year && c.month === month)) return prev;
-              return [...prev, { year, month, closed_at, closed_by }];
-            });
-            if (isRemote) {
-              // Use the ref to access fresh txs/budgets/closeouts state
-              const summary = buildSummaryFromRef(year, mIdx, bridgeRef.current);
-              if (closed_by_name) summary.triggeredBy = closed_by_name;
-              setCelebration(summary);
-            }
-          },
-          applyCloseoutDelete: ({ year, month }) => {
-            setCloseouts(prev => prev.filter(c => !(c.year === year && c.month === month)));
-          }
-        };
-        if (window.__onReactReady) window.__onReactReady();
-        return () => { window.__reactBridge = null; };
-      }, []);
-
-      // Load closeouts on mount (once we have a SupaStore)
-      useEffect(() => {
-        if (window.__SupaStore?.listCloseouts) {
-          window.__SupaStore.listCloseouts().then(rows => {
-            setCloseouts(rows || []);
-          });
-        }
-      }, []);
+      // (The actual setup happens AFTER state declarations, below.)
 
       // Global keyboard shortcuts. Only fire when not already typing in
       // an input/textarea/contenteditable, so they don't interrupt edits.
@@ -2824,6 +2779,56 @@
       // Confirm-dialog state. Set to { title, message, onConfirm } to show;
       // null to hide.
       const [confirmState, setConfirmState] = useState(null);
+
+      // Stable ref so the bridge handlers (which run outside React's
+      // render lifecycle) can access the latest state. Kept up to date
+      // on every render via direct mutation. NOTE: this MUST come after
+      // all the state declarations above — referencing them earlier
+      // throws a ReferenceError due to the temporal dead zone.
+      const bridgeRef = React.useRef({});
+      bridgeRef.current = { closeouts, txs, budgetsByYear, year, monthIdx };
+
+      useEffect(() => {
+        window.__reactBridge = {
+          setTxs,
+          setBudgetsByYear,
+          extendCategoryLists: (type, name) => {
+            if (type === 'Income'   && !INCOME_CATS.includes(name))  INCOME_CATS.push(name);
+            if (type === 'Expenses' && !EXPENSE_CATS.includes(name)) EXPENSE_CATS.push(name);
+            if (type === 'Savings'  && !SAVINGS_CATS.includes(name)) SAVINGS_CATS.push(name);
+          },
+          // Called by supabase-client when the OTHER user closes out a
+          // month. Adds it to local state and fires the celebration on
+          // this session so both screens see it.
+          applyCloseoutInsert: ({ year, month, closed_at, closed_by, closed_by_name, isRemote }) => {
+            const mIdx = month - 1;
+            setCloseouts(prev => {
+              if (prev.some(c => c.year === year && c.month === month)) return prev;
+              return [...prev, { year, month, closed_at, closed_by }];
+            });
+            if (isRemote) {
+              // Use the ref to access fresh txs/budgets/closeouts state
+              const summary = buildSummaryFromRef(year, mIdx, bridgeRef.current);
+              if (closed_by_name) summary.triggeredBy = closed_by_name;
+              setCelebration(summary);
+            }
+          },
+          applyCloseoutDelete: ({ year, month }) => {
+            setCloseouts(prev => prev.filter(c => !(c.year === year && c.month === month)));
+          }
+        };
+        if (window.__onReactReady) window.__onReactReady();
+        return () => { window.__reactBridge = null; };
+      }, []);
+
+      // Load closeouts on mount (once we have a SupaStore)
+      useEffect(() => {
+        if (window.__SupaStore?.listCloseouts) {
+          window.__SupaStore.listCloseouts().then(rows => {
+            setCloseouts(rows || []);
+          });
+        }
+      }, []);
       // Initialize theme from (in priority order):
       //   1. Supabase profile (set by supabase-client.js on login)
       //   2. localStorage (set by the preload script in index.html head)
