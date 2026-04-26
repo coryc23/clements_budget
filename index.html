@@ -1047,31 +1047,27 @@
     }
 
     // Sankey diagram — three-column flow visualization showing
-    // income sources → type buckets (Expenses/Savings/Leftover) → individual categories.
+    // total Income → type buckets (Expenses/Savings/Leftover) → individual categories.
     // Renders as pure SVG with no external chart library.
     //
-    // Algorithm:
-    //   1. Compute total flow amount; this drives vertical scaling.
-    //   2. Stack source nodes (left), middle nodes (center), target nodes (right)
-    //      vertically with heights proportional to their amount.
-    //   3. For each flow, draw a bezier path from source's right edge to
-    //      target's left edge, with stroke-width matching the flow amount.
-    //   4. Hover highlights paths and shows a tooltip.
-    var Sankey = function({ income, expenses, savings, leftover }) {
+    // Design: income sources are combined into a single "Income" node on
+    // the left. This avoids misleading proportional splits (e.g. "Brittany
+    // → Savings: $X") that aren't grounded in real allocation data — the
+    // app doesn't know which paycheck funded which expense. The clean
+    // story is: total money in → how it split → where each piece went.
+    var Sankey = function({ income, expenses, savings, leftover, periodLabel }) {
       const { useState } = React;
       const [hover, setHover] = useState(null); // {sourceName, targetName, amount}
 
-      // Layout dimensions
-      const W = 900, H = 560;
+      // Layout dimensions. Generous side margins (180px each) to fit the
+      // category labels + dollar amounts without clipping.
+      const W = 1000, H = 580;
       const NODE_W = 14;
-      const PAD = 12; // vertical gap between stacked nodes
+      const PAD = 12;
       const TOP = 30, BOTTOM = 30;
+      const SIDE_MARGIN = 180;
       const usableH = H - TOP - BOTTOM;
 
-      // Build flow data
-      // Left column: income sources
-      // Middle column: 3 type buckets (Expenses, Savings, Leftover)
-      // Right column: individual expense + savings categories (no leftover detail)
       const totalIn = income.reduce((a,b)=>a+b.amount, 0);
       const totalExp = expenses.reduce((a,b)=>a+b.amount, 0);
       const totalSav = savings.reduce((a,b)=>a+b.amount, 0);
@@ -1090,51 +1086,46 @@
         );
       }
 
-      // Scale: pixels per dollar, computed so that the largest column fits.
-      // Each column's total flow must equal totalIn (conservation of money).
-      // Find tallest column to derive scale.
+      // Compute scale (pixels per dollar). All three columns must total
+      // the same flow volume by conservation of money, so we just use
+      // the most-constrained column based on its number of nodes.
       const middleTotal = totalExp + totalSav + lo;
-      const maxTotal = Math.max(totalIn, middleTotal);
-      // Account for padding: each column has (n-1) padding gaps
-      const incomeNodes = income.filter(n=>n.amount>0).length;
-      const middleNodes = (totalExp>0?1:0) + (totalSav>0?1:0) + (lo>0?1:0);
       const expNodes = expenses.filter(n=>n.amount>0).length;
       const savNodes = savings.filter(n=>n.amount>0).length;
+      const middleNodes = (totalExp>0?1:0) + (totalSav>0?1:0) + (lo>0?1:0);
       const rightNodes = expNodes + savNodes + (lo>0?1:0);
 
       // Available pixels for actual node heights, after subtracting padding
-      const incomeAvail = usableH - Math.max(0, incomeNodes-1)*PAD;
       const middleAvail = usableH - Math.max(0, middleNodes-1)*PAD;
       const rightAvail  = usableH - Math.max(0, rightNodes-1)*PAD;
-      // Scale = pixels per dollar; use the most constrained column
+      // Single income node on the left → no padding needed there
       const scale = Math.min(
-        incomeAvail / totalIn,
-        middleAvail / middleTotal,
+        usableH / totalIn,
+        middleAvail / Math.max(1, middleTotal),
         rightAvail / Math.max(1, totalExp + totalSav + lo)
       );
 
       // Build node positions per column
-      function buildColumn(items, x, totalAmount) {
+      function buildColumn(items, x) {
         const heights = items.map(it => it.amount * scale);
         const totalH = heights.reduce((a,b)=>a+b, 0) + Math.max(0, items.length-1)*PAD;
-        let y = TOP + (usableH - totalH) / 2; // vertical center
+        let y = TOP + (usableH - totalH) / 2;
         const nodes = [];
         for (let i = 0; i < items.length; i++) {
           const h = heights[i];
-          nodes.push({
-            ...items[i],
-            x, y, h,
-            cy: y + h/2
-          });
+          nodes.push({ ...items[i], x, y, h, cy: y + h/2 });
           y += h + PAD;
         }
         return nodes;
       }
 
       // Filter zero items
-      const incomeItems = income.filter(n=>n.amount>0);
       const expenseItems = expenses.filter(n=>n.amount>0);
       const savingsItems = savings.filter(n=>n.amount>0);
+
+      // ONE combined income node (instead of one per source). The
+      // total is what matters for the flow story.
+      const leftItems = [{ name: 'Income', amount: totalIn, color: 'var(--sage)', glyph: '💵' }];
 
       const middleItems = [];
       if (totalExp > 0) middleItems.push({ name: 'Expenses', amount: totalExp, color: 'var(--terracotta)', glyph: '💸' });
@@ -1147,53 +1138,44 @@
         ...(lo > 0 ? [{name: 'Leftover', amount: lo, parent: 'Leftover', color: 'var(--amber)', glyph: '✨'}] : [])
       ];
 
-      const xLeft   = 140;
+      const xLeft   = SIDE_MARGIN;
       const xMid    = W/2 - NODE_W/2;
-      const xRight  = W - 140 - NODE_W;
+      const xRight  = W - SIDE_MARGIN - NODE_W;
 
-      const leftNodes = buildColumn(incomeItems.map(i => ({...i, color: 'var(--sage)'})), xLeft, totalIn);
-      const midNodes  = buildColumn(middleItems, xMid, middleTotal);
-      const rightNodesArr = buildColumn(rightItems, xRight, totalExp + totalSav + lo);
+      const leftNodes = buildColumn(leftItems, xLeft);
+      const midNodes  = buildColumn(middleItems, xMid);
+      const rightNodesArr = buildColumn(rightItems, xRight);
 
-      // Build flows: left → mid (proportional split), mid → right
-      // Each left node distributes proportionally to all middle nodes
-      // (since we don't know which paycheck "went to" what specifically).
+      // Build flows
       const flows = [];
-
-      // For tracking how much vertical space is consumed at each edge of each node,
-      // we maintain top/bottom offset trackers.
       const leftOffsets = leftNodes.map(n => ({ y: n.y }));
-      const midOffsetsLeft = midNodes.map(n => ({ y: n.y }));   // incoming
-      const midOffsetsRight = midNodes.map(n => ({ y: n.y }));  // outgoing
+      const midOffsetsLeft = midNodes.map(n => ({ y: n.y }));
+      const midOffsetsRight = midNodes.map(n => ({ y: n.y }));
       const rightOffsets = rightNodesArr.map(n => ({ y: n.y }));
 
-      // Left → Middle: proportional flow from each income source to each middle bucket
-      for (let li = 0; li < leftNodes.length; li++) {
-        const ln = leftNodes[li];
-        for (let mi = 0; mi < midNodes.length; mi++) {
-          const mn = midNodes[mi];
-          // Flow amount = (income's share of total) * (this middle bucket's amount)
-          const amt = (ln.amount / totalIn) * mn.amount;
-          if (amt <= 0) continue;
-          const h = amt * scale;
-          flows.push({
-            sourceX: ln.x + NODE_W,
-            sourceY: leftOffsets[li].y,
-            sourceH: h,
-            targetX: mn.x,
-            targetY: midOffsetsLeft[mi].y,
-            targetH: h,
-            color: mn.color,
-            sourceName: ln.name,
-            targetName: mn.name,
-            amount: amt
-          });
-          leftOffsets[li].y += h;
-          midOffsetsLeft[mi].y += h;
-        }
+      // Left (Income) → Middle: one flow per middle bucket, full amount
+      const incomeNode = leftNodes[0];
+      for (let mi = 0; mi < midNodes.length; mi++) {
+        const mn = midNodes[mi];
+        const amt = mn.amount;
+        const h = amt * scale;
+        flows.push({
+          sourceX: incomeNode.x + NODE_W,
+          sourceY: leftOffsets[0].y,
+          sourceH: h,
+          targetX: mn.x,
+          targetY: midOffsetsLeft[mi].y,
+          targetH: h,
+          color: mn.color,
+          sourceName: 'Income',
+          targetName: mn.name,
+          amount: amt
+        });
+        leftOffsets[0].y += h;
+        midOffsetsLeft[mi].y += h;
       }
 
-      // Middle → Right: each middle bucket flows to its categories
+      // Middle → Right
       for (let mi = 0; mi < midNodes.length; mi++) {
         const mn = midNodes[mi];
         const targets = rightNodesArr
@@ -1218,7 +1200,6 @@
         }
       }
 
-      // Bezier path between two flow endpoints (rectangles)
       function flowPath(f) {
         const x1 = f.sourceX, y1 = f.sourceY, h1 = f.sourceH;
         const x2 = f.targetX, y2 = f.targetY, h2 = f.targetH;
@@ -1237,7 +1218,6 @@
       return (
         <div style={{position: 'relative'}}>
           <svg viewBox={`0 0 ${W} ${H}`} style={{width: '100%', height: 'auto', display: 'block'}}>
-            {/* Flows (rendered behind nodes) */}
             <g>
               {flows.map((f, i) => (
                 <path
@@ -1251,27 +1231,23 @@
                 />
               ))}
             </g>
-            {/* Nodes */}
             <g>
               {[...leftNodes, ...midNodes, ...rightNodesArr].map((n, i) => (
-                <g key={i}>
-                  <rect x={n.x} y={n.y} width={NODE_W} height={n.h}
-                        fill={n.color} rx="2"/>
-                </g>
+                <rect key={i} x={n.x} y={n.y} width={NODE_W} height={n.h} fill={n.color} rx="2"/>
               ))}
             </g>
-            {/* Labels — left side: right-aligned */}
+            {/* Left labels — right-aligned */}
             <g>
               {leftNodes.map((n, i) => (
                 <text key={i} x={n.x - 8} y={n.cy + 4}
-                      textAnchor="end" fontSize="12" fill="var(--ink)"
-                      style={{fontFamily: "'Inter', sans-serif"}}>
+                      textAnchor="end" fontSize="13" fill="var(--ink)" fontWeight="600"
+                      style={{fontFamily: "'Fraunces', serif"}}>
                   {n.glyph || ''} {n.name}
-                  <tspan fill="var(--ink-3)" fontSize="11"> · {fmt(n.amount)}</tspan>
+                  <tspan fill="var(--ink-3)" fontWeight="400" fontSize="11"> · {fmt(n.amount)}</tspan>
                 </text>
               ))}
             </g>
-            {/* Labels — middle: above each node */}
+            {/* Middle labels — above each node */}
             <g>
               {midNodes.map((n, i) => (
                 <text key={i} x={n.x + NODE_W/2} y={n.y - 6}
@@ -1282,7 +1258,7 @@
                 </text>
               ))}
             </g>
-            {/* Labels — right side: left-aligned */}
+            {/* Right labels — left-aligned */}
             <g>
               {rightNodesArr.map((n, i) => (
                 <text key={i} x={n.x + NODE_W + 8} y={n.cy + 4}
@@ -1294,7 +1270,6 @@
               ))}
             </g>
           </svg>
-          {/* Hover tooltip */}
           {hover && (
             <div style={{
               position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
@@ -2018,16 +1993,34 @@
     // FlowView — wraps the Sankey diagram with month context.
     // Computes income/expense/savings groupings for the chosen period
     // and renders the Sankey alongside summary stats and copy.
-    var FlowView = function({ txs, monthIdx, year, fmt }) {
+    var FlowView = function({ txs, monthIdx, year, setMonthIdx, setYear, years, fmt }) {
+      const { useState } = React;
       const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      const prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
-      const monthTxs = txs.filter(t => t.date.startsWith(prefix));
+      // Period inside the Flow view. Defaults to 'month' to match the
+      // initial app behavior. Stored locally — switching back to other
+      // tabs preserves the regular view state.
+      const [period, setPeriod] = useState('month');
+
+      // Filter transactions based on the active period
+      let filtered, periodLabel;
+      if (period === 'month') {
+        const prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
+        filtered = txs.filter(t => t.date.startsWith(prefix));
+        periodLabel = `${MONTHS_LONG[monthIdx]} ${year}`;
+      } else if (period === 'year') {
+        const prefix = year + '-';
+        filtered = txs.filter(t => t.date.startsWith(prefix));
+        periodLabel = `${year}`;
+      } else {
+        filtered = txs;
+        periodLabel = 'All time';
+      }
 
       // Group by category
       const grp = (type) => {
         const m = {};
-        for (const t of monthTxs.filter(t => t.type === type)) {
+        for (const t of filtered.filter(t => t.type === type)) {
           m[t.category] = (m[t.category] || 0) + t.amount;
         }
         return Object.entries(m)
@@ -2045,10 +2038,10 @@
 
       return (
         <div className="card" style={{padding: '20px 22px'}}>
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 16, flexWrap: 'wrap'}}>
             <div>
               <h2 className="serif" style={{margin: 0, fontSize: 22}}>
-                Money flow · {MONTHS_LONG[monthIdx]} {year}
+                Money flow · {periodLabel}
               </h2>
               <div style={{color: 'var(--ink-3)', fontSize: 13, marginTop: 4, fontStyle: 'italic', fontFamily: "'Fraunces', serif"}}>
                 Where every dollar went
@@ -2077,11 +2070,38 @@
             </div>
           </div>
 
+          {/* Period switcher inside the Flow view */}
+          <div style={{
+            display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16,
+            padding: '8px 12px', background: 'var(--bg-soft)', borderRadius: 10,
+            flexWrap: 'wrap'
+          }}>
+            <span style={{fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontWeight: 600, marginRight: 4}}>
+              Period
+            </span>
+            <div className="seg">
+              <button className={period==='month'?'on':''} onClick={()=>setPeriod('month')}>Month</button>
+              <button className={period==='year'?'on':''} onClick={()=>setPeriod('year')}>Year</button>
+              <button className={period==='all'?'on':''} onClick={()=>setPeriod('all')}>All time</button>
+            </div>
+            {period === 'month' && setMonthIdx && (
+              <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
+                {MONTHS_LONG.map((m,i) => <option key={i} value={i}>{m}</option>)}
+              </select>
+            )}
+            {period !== 'all' && setYear && years && (
+              <select className="select-year" value={year} onChange={e=>setYear(parseInt(e.target.value))}>
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            )}
+          </div>
+
           <Sankey
             income={income}
             expenses={expenses}
             savings={savings}
             leftover={leftover}
+            periodLabel={periodLabel}
           />
 
           <div style={{
@@ -3416,12 +3436,12 @@
                 <button className={view==='all'?'on':''} onClick={()=>setView('all')}>All time</button>
                 <button className={view==='flow'?'on':''} onClick={()=>setView('flow')}>Flow</button>
               </div>
-              {(view === 'month' || view === 'flow') && (
+              {view === 'month' && (
                 <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
                   {MONTHS_LONG.map((m,i) => <option key={i} value={i}>{m}</option>)}
                 </select>
               )}
-              {view !== 'all' && (
+              {(view === 'month' || view === 'year') && (
                 <select className="select-year" value={year} onChange={e=>setYear(parseInt(e.target.value))}>
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
@@ -3526,6 +3546,9 @@
               txs={txs}
               monthIdx={monthIdx}
               year={year}
+              setMonthIdx={setMonthIdx}
+              setYear={setYear}
+              years={years}
               fmt={fmt}
             />
           ) : (
