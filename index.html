@@ -316,7 +316,84 @@
   .modal-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
-  /* fast-entry command bar — slides down from top, opened with / */
+  /* Celebration modal — fires when closing out a month */
+  .celebration-back {
+    position: fixed; inset: 0; z-index: 300;
+    background: rgba(20, 18, 14, 0.55); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    animation: modalBackFade 0.2s ease-out;
+  }
+  .celebration-card {
+    position: relative;
+    width: 520px; max-width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--line); border-radius: 18px;
+    padding: 36px 32px;
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.4);
+    text-align: center;
+    z-index: 2;
+    animation: celebrate-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes celebrate-in {
+    from { opacity: 0; transform: scale(0.92) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .celebration-mark { margin: 0 auto 8px; }
+  .celebration-headline {
+    font-family: 'Fraunces', serif; font-weight: 500; font-size: 28px;
+    letter-spacing: -0.02em; margin: 8px 0 6px; color: var(--ink);
+  }
+  .celebration-subline {
+    font-family: 'Fraunces', serif; font-style: italic;
+    color: var(--ink-2); font-size: 15px; margin-bottom: 28px;
+  }
+  .celebration-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 24px;
+  }
+  .celebration-stats .stat-block {
+    padding: 14px 8px; background: var(--bg-soft);
+    border-radius: 10px;
+  }
+  .celebration-stats .stat-block-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-3); font-weight: 600; margin-bottom: 6px;
+  }
+  .celebration-stats .stat-block-value {
+    font-size: 16px; font-weight: 600; color: var(--ink);
+  }
+  .celebration-highlights {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-bottom: 24px; text-align: left;
+    padding: 16px 18px; background: var(--bg-soft); border-radius: 12px;
+  }
+  .celebration-highlights .highlight {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 14px; color: var(--ink-2);
+  }
+  .celebration-highlights .highlight-emoji {
+    font-size: 18px; flex-shrink: 0;
+  }
+  .celebration-close { width: 100%; padding: 12px; }
+
+  /* Confetti */
+  .confetti-layer {
+    position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+    z-index: 1;
+  }
+  .confetti-piece {
+    position: absolute; top: -20px;
+    border-radius: 2px;
+    animation-name: confetti-fall;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+    animation-iteration-count: 1;
+    animation-fill-mode: forwards;
+  }
+  @keyframes confetti-fall {
+    0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(var(--rotate, 360deg)); opacity: 0.4; }
+  }
   .fast-bar-back { position: fixed; inset: 0; background: rgba(20,18,14,0.3); backdrop-filter: blur(3px); z-index: 250; display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; animation: fastBarFade 0.15s ease-out; }
   .fast-bar { width: 600px; max-width: calc(100vw - 40px); background: var(--bg-elev); border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 20px 60px -10px rgba(0,0,0,0.3); padding: 6px; animation: fastBarSlide 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
   .fast-bar-input { width: 100%; padding: 16px 18px; border: 0; background: transparent; font: inherit; font-size: 17px; color: inherit; outline: none; box-sizing: border-box; }
@@ -944,6 +1021,269 @@
           <path d={area} fill={color} opacity="0.12"/>
           <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
         </svg>
+      );
+    }
+
+    // Sankey diagram — three-column flow visualization showing
+    // income sources → type buckets (Expenses/Savings/Leftover) → individual categories.
+    // Renders as pure SVG with no external chart library.
+    //
+    // Algorithm:
+    //   1. Compute total flow amount; this drives vertical scaling.
+    //   2. Stack source nodes (left), middle nodes (center), target nodes (right)
+    //      vertically with heights proportional to their amount.
+    //   3. For each flow, draw a bezier path from source's right edge to
+    //      target's left edge, with stroke-width matching the flow amount.
+    //   4. Hover highlights paths and shows a tooltip.
+    var Sankey = function({ income, expenses, savings, leftover }) {
+      const { useState } = React;
+      const [hover, setHover] = useState(null); // {sourceName, targetName, amount}
+
+      // Layout dimensions
+      const W = 900, H = 560;
+      const NODE_W = 14;
+      const PAD = 12; // vertical gap between stacked nodes
+      const TOP = 30, BOTTOM = 30;
+      const usableH = H - TOP - BOTTOM;
+
+      // Build flow data
+      // Left column: income sources
+      // Middle column: 3 type buckets (Expenses, Savings, Leftover)
+      // Right column: individual expense + savings categories (no leftover detail)
+      const totalIn = income.reduce((a,b)=>a+b.amount, 0);
+      const totalExp = expenses.reduce((a,b)=>a+b.amount, 0);
+      const totalSav = savings.reduce((a,b)=>a+b.amount, 0);
+      const lo = Math.max(0, leftover);
+
+      if (totalIn <= 0) {
+        return (
+          <div style={{padding: '60px 20px', textAlign: 'center', color: 'var(--ink-3)'}}>
+            <div style={{fontFamily: "'Fraunces', serif", fontSize: 18, fontStyle: 'italic'}}>
+              No income recorded for this period.
+            </div>
+            <div style={{fontSize: 13, marginTop: 8}}>
+              Add some income transactions to see your flow.
+            </div>
+          </div>
+        );
+      }
+
+      // Scale: pixels per dollar, computed so that the largest column fits.
+      // Each column's total flow must equal totalIn (conservation of money).
+      // Find tallest column to derive scale.
+      const middleTotal = totalExp + totalSav + lo;
+      const maxTotal = Math.max(totalIn, middleTotal);
+      // Account for padding: each column has (n-1) padding gaps
+      const incomeNodes = income.filter(n=>n.amount>0).length;
+      const middleNodes = (totalExp>0?1:0) + (totalSav>0?1:0) + (lo>0?1:0);
+      const expNodes = expenses.filter(n=>n.amount>0).length;
+      const savNodes = savings.filter(n=>n.amount>0).length;
+      const rightNodes = expNodes + savNodes + (lo>0?1:0);
+
+      // Available pixels for actual node heights, after subtracting padding
+      const incomeAvail = usableH - Math.max(0, incomeNodes-1)*PAD;
+      const middleAvail = usableH - Math.max(0, middleNodes-1)*PAD;
+      const rightAvail  = usableH - Math.max(0, rightNodes-1)*PAD;
+      // Scale = pixels per dollar; use the most constrained column
+      const scale = Math.min(
+        incomeAvail / totalIn,
+        middleAvail / middleTotal,
+        rightAvail / Math.max(1, totalExp + totalSav + lo)
+      );
+
+      // Build node positions per column
+      function buildColumn(items, x, totalAmount) {
+        const heights = items.map(it => it.amount * scale);
+        const totalH = heights.reduce((a,b)=>a+b, 0) + Math.max(0, items.length-1)*PAD;
+        let y = TOP + (usableH - totalH) / 2; // vertical center
+        const nodes = [];
+        for (let i = 0; i < items.length; i++) {
+          const h = heights[i];
+          nodes.push({
+            ...items[i],
+            x, y, h,
+            cy: y + h/2
+          });
+          y += h + PAD;
+        }
+        return nodes;
+      }
+
+      // Filter zero items
+      const incomeItems = income.filter(n=>n.amount>0);
+      const expenseItems = expenses.filter(n=>n.amount>0);
+      const savingsItems = savings.filter(n=>n.amount>0);
+
+      const middleItems = [];
+      if (totalExp > 0) middleItems.push({ name: 'Expenses', amount: totalExp, color: 'var(--terracotta)', glyph: '💸' });
+      if (totalSav > 0) middleItems.push({ name: 'Savings', amount: totalSav, color: 'var(--blue)', glyph: '🏦' });
+      if (lo > 0) middleItems.push({ name: 'Leftover', amount: lo, color: 'var(--amber)', glyph: '✨' });
+
+      const rightItems = [
+        ...expenseItems.map(e => ({...e, parent: 'Expenses', color: 'var(--terracotta)'})),
+        ...savingsItems.map(s => ({...s, parent: 'Savings', color: 'var(--blue)'})),
+        ...(lo > 0 ? [{name: 'Leftover', amount: lo, parent: 'Leftover', color: 'var(--amber)', glyph: '✨'}] : [])
+      ];
+
+      const xLeft   = 140;
+      const xMid    = W/2 - NODE_W/2;
+      const xRight  = W - 140 - NODE_W;
+
+      const leftNodes = buildColumn(incomeItems.map(i => ({...i, color: 'var(--sage)'})), xLeft, totalIn);
+      const midNodes  = buildColumn(middleItems, xMid, middleTotal);
+      const rightNodesArr = buildColumn(rightItems, xRight, totalExp + totalSav + lo);
+
+      // Build flows: left → mid (proportional split), mid → right
+      // Each left node distributes proportionally to all middle nodes
+      // (since we don't know which paycheck "went to" what specifically).
+      const flows = [];
+
+      // For tracking how much vertical space is consumed at each edge of each node,
+      // we maintain top/bottom offset trackers.
+      const leftOffsets = leftNodes.map(n => ({ y: n.y }));
+      const midOffsetsLeft = midNodes.map(n => ({ y: n.y }));   // incoming
+      const midOffsetsRight = midNodes.map(n => ({ y: n.y }));  // outgoing
+      const rightOffsets = rightNodesArr.map(n => ({ y: n.y }));
+
+      // Left → Middle: proportional flow from each income source to each middle bucket
+      for (let li = 0; li < leftNodes.length; li++) {
+        const ln = leftNodes[li];
+        for (let mi = 0; mi < midNodes.length; mi++) {
+          const mn = midNodes[mi];
+          // Flow amount = (income's share of total) * (this middle bucket's amount)
+          const amt = (ln.amount / totalIn) * mn.amount;
+          if (amt <= 0) continue;
+          const h = amt * scale;
+          flows.push({
+            sourceX: ln.x + NODE_W,
+            sourceY: leftOffsets[li].y,
+            sourceH: h,
+            targetX: mn.x,
+            targetY: midOffsetsLeft[mi].y,
+            targetH: h,
+            color: mn.color,
+            sourceName: ln.name,
+            targetName: mn.name,
+            amount: amt
+          });
+          leftOffsets[li].y += h;
+          midOffsetsLeft[mi].y += h;
+        }
+      }
+
+      // Middle → Right: each middle bucket flows to its categories
+      for (let mi = 0; mi < midNodes.length; mi++) {
+        const mn = midNodes[mi];
+        const targets = rightNodesArr
+          .map((rn, idx) => ({rn, idx}))
+          .filter(({rn}) => rn.parent === mn.name);
+        for (const {rn, idx} of targets) {
+          const h = rn.amount * scale;
+          flows.push({
+            sourceX: mn.x + NODE_W,
+            sourceY: midOffsetsRight[mi].y,
+            sourceH: h,
+            targetX: rn.x,
+            targetY: rightOffsets[idx].y,
+            targetH: h,
+            color: rn.color,
+            sourceName: mn.name,
+            targetName: rn.name,
+            amount: rn.amount
+          });
+          midOffsetsRight[mi].y += h;
+          rightOffsets[idx].y += h;
+        }
+      }
+
+      // Bezier path between two flow endpoints (rectangles)
+      function flowPath(f) {
+        const x1 = f.sourceX, y1 = f.sourceY, h1 = f.sourceH;
+        const x2 = f.targetX, y2 = f.targetY, h2 = f.targetH;
+        const cx = (x1 + x2) / 2;
+        return `M ${x1} ${y1}
+                C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}
+                L ${x2} ${y2 + h2}
+                C ${cx} ${y2 + h2}, ${cx} ${y1 + h1}, ${x1} ${y1 + h1}
+                Z`;
+      }
+
+      const isHovered = (f) => hover &&
+        f.sourceName === hover.sourceName &&
+        f.targetName === hover.targetName;
+
+      return (
+        <div style={{position: 'relative'}}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{width: '100%', height: 'auto', display: 'block'}}>
+            {/* Flows (rendered behind nodes) */}
+            <g>
+              {flows.map((f, i) => (
+                <path
+                  key={i}
+                  d={flowPath(f)}
+                  fill={f.color}
+                  fillOpacity={hover ? (isHovered(f) ? 0.7 : 0.15) : 0.35}
+                  style={{transition: 'fill-opacity 0.15s', cursor: 'pointer'}}
+                  onMouseEnter={() => setHover({sourceName: f.sourceName, targetName: f.targetName, amount: f.amount})}
+                  onMouseLeave={() => setHover(null)}
+                />
+              ))}
+            </g>
+            {/* Nodes */}
+            <g>
+              {[...leftNodes, ...midNodes, ...rightNodesArr].map((n, i) => (
+                <g key={i}>
+                  <rect x={n.x} y={n.y} width={NODE_W} height={n.h}
+                        fill={n.color} rx="2"/>
+                </g>
+              ))}
+            </g>
+            {/* Labels — left side: right-aligned */}
+            <g>
+              {leftNodes.map((n, i) => (
+                <text key={i} x={n.x - 8} y={n.cy + 4}
+                      textAnchor="end" fontSize="12" fill="var(--ink)"
+                      style={{fontFamily: "'Inter', sans-serif"}}>
+                  {n.glyph || ''} {n.name}
+                  <tspan fill="var(--ink-3)" fontSize="11"> · {fmt(n.amount)}</tspan>
+                </text>
+              ))}
+            </g>
+            {/* Labels — middle: above each node */}
+            <g>
+              {midNodes.map((n, i) => (
+                <text key={i} x={n.x + NODE_W/2} y={n.y - 6}
+                      textAnchor="middle" fontSize="13" fill="var(--ink)" fontWeight="600"
+                      style={{fontFamily: "'Fraunces', serif"}}>
+                  {n.glyph} {n.name}
+                  <tspan fill="var(--ink-3)" fontWeight="400" fontSize="11"> · {fmt(n.amount)}</tspan>
+                </text>
+              ))}
+            </g>
+            {/* Labels — right side: left-aligned */}
+            <g>
+              {rightNodesArr.map((n, i) => (
+                <text key={i} x={n.x + NODE_W + 8} y={n.cy + 4}
+                      textAnchor="start" fontSize="12" fill="var(--ink)"
+                      style={{fontFamily: "'Inter', sans-serif"}}>
+                  {n.glyph || ''} {n.name}
+                  <tspan fill="var(--ink-3)" fontSize="11"> · {fmt(n.amount)}</tspan>
+                </text>
+              ))}
+            </g>
+          </svg>
+          {/* Hover tooltip */}
+          {hover && (
+            <div style={{
+              position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--ink)', color: 'var(--bg)', padding: '6px 12px',
+              borderRadius: 8, fontSize: 12, pointerEvents: 'none',
+              fontFamily: "'Inter', sans-serif"
+            }}>
+              {hover.sourceName} → {hover.targetName}: <strong>{fmt(hover.amount)}</strong>
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -1653,7 +1993,89 @@
       );
     }
 
-    Object.assign(window, { Bar, Donut, Spark, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtSigned });
+    // FlowView — wraps the Sankey diagram with month context.
+    // Computes income/expense/savings groupings for the chosen period
+    // and renders the Sankey alongside summary stats and copy.
+    var FlowView = function({ txs, monthIdx, year, fmt }) {
+      const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
+      const monthTxs = txs.filter(t => t.date.startsWith(prefix));
+
+      // Group by category
+      const grp = (type) => {
+        const m = {};
+        for (const t of monthTxs.filter(t => t.type === type)) {
+          m[t.category] = (m[t.category] || 0) + t.amount;
+        }
+        return Object.entries(m)
+          .map(([name, amount]) => ({ name, amount, glyph: window.glyphFor ? window.glyphFor(name) : '' }))
+          .sort((a,b) => b.amount - a.amount);
+      };
+
+      const income = grp('Income');
+      const expenses = grp('Expenses');
+      const savings = grp('Savings');
+      const totalIn = income.reduce((a,b)=>a+b.amount, 0);
+      const totalOut = expenses.reduce((a,b)=>a+b.amount, 0);
+      const totalSav = savings.reduce((a,b)=>a+b.amount, 0);
+      const leftover = totalIn - totalOut - totalSav;
+
+      return (
+        <div className="card" style={{padding: '20px 22px'}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18}}>
+            <div>
+              <h2 className="serif" style={{margin: 0, fontSize: 22}}>
+                Money flow · {MONTHS_LONG[monthIdx]} {year}
+              </h2>
+              <div style={{color: 'var(--ink-3)', fontSize: 13, marginTop: 4, fontStyle: 'italic', fontFamily: "'Fraunces', serif"}}>
+                Where every dollar went
+              </div>
+            </div>
+            <div style={{display: 'flex', gap: 24, fontSize: 13}}>
+              <div style={{textAlign: 'right'}}>
+                <div style={{color: 'var(--ink-3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em'}}>In</div>
+                <div className="num" style={{color: 'var(--sage-ink)', fontWeight: 600, fontSize: 16}}>{fmt(totalIn)}</div>
+              </div>
+              <div style={{textAlign: 'right'}}>
+                <div style={{color: 'var(--ink-3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em'}}>Spent</div>
+                <div className="num" style={{color: 'var(--terra-ink)', fontWeight: 600, fontSize: 16}}>{fmt(totalOut)}</div>
+              </div>
+              <div style={{textAlign: 'right'}}>
+                <div style={{color: 'var(--ink-3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em'}}>Saved</div>
+                <div className="num" style={{color: 'var(--blue-ink)', fontWeight: 600, fontSize: 16}}>{fmt(totalSav)}</div>
+              </div>
+              <div style={{textAlign: 'right'}}>
+                <div style={{color: 'var(--ink-3)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em'}}>Leftover</div>
+                <div className="num" style={{
+                  color: leftover < 0 ? 'var(--terra-ink)' : 'var(--ink)',
+                  fontWeight: 600, fontSize: 16
+                }}>{fmt(leftover)}</div>
+              </div>
+            </div>
+          </div>
+
+          <Sankey
+            income={income}
+            expenses={expenses}
+            savings={savings}
+            leftover={leftover}
+          />
+
+          <div style={{
+            marginTop: 16, padding: '12px 16px',
+            background: 'var(--bg-soft)', borderRadius: 10,
+            fontSize: 12, color: 'var(--ink-3)',
+            fontStyle: 'italic', fontFamily: "'Fraunces', serif"
+          }}>
+            Hover over any flow to see its amount. Income on the left → how it split → individual categories on the right.
+          </div>
+        </div>
+      );
+    }
+    window.FlowView = FlowView;
+
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtSigned });
   
 })();
 </script>
@@ -1973,6 +2395,174 @@
       );
     };
     window.FastEntryBar = FastEntryBar;
+
+    // CelebrationModal — fires when user closes out a month.
+    // Always celebratory in tone. Shows summary stats with copy that
+    // adapts to whether they came in under or over budget, but never
+    // makes them feel bad — even rough months get encouragement.
+    var CelebrationModal = function({ open, onClose, summary }) {
+      const { useEffect, useState } = React;
+      // Confetti pieces — tiny colored squares that fall and rotate
+      const [pieces] = useState(() => {
+        const colors = ['var(--sage)', 'var(--terracotta)', 'var(--blue)', 'var(--amber)', 'var(--plum)'];
+        const out = [];
+        for (let i = 0; i < 60; i++) {
+          out.push({
+            x: Math.random() * 100,
+            delay: Math.random() * 0.4,
+            duration: 2 + Math.random() * 1.5,
+            rotate: (Math.random() - 0.5) * 720,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            size: 8 + Math.random() * 6
+          });
+        }
+        return out;
+      });
+
+      useEffect(() => {
+        if (!open) return;
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [open, onClose]);
+
+      if (!open || !summary) return null;
+
+      const { monthName, year, income, expenses, savings, leftover, savingsRate, txCount, vsLastMonth, underBudgetCount, totalBudgetedCount, perfectMonths, triggeredBy } = summary;
+      const hadIncome = income > 0;
+      const positiveLeftover = leftover >= 0;
+      const goodSavingsRate = savingsRate >= 0.15;
+      const allUnderBudget = underBudgetCount === totalBudgetedCount && totalBudgetedCount > 0;
+
+      // Headline: warm and adaptive
+      let headline, subline;
+      if (allUnderBudget && positiveLeftover) {
+        headline = `You crushed ${monthName}.`;
+        subline = `Every category came in under budget. That's no accident.`;
+      } else if (positiveLeftover && goodSavingsRate) {
+        headline = `Strong month, you two.`;
+        subline = `${(savingsRate*100).toFixed(0)}% savings rate is a real win.`;
+      } else if (positiveLeftover) {
+        headline = `${monthName} is in the books.`;
+        subline = `You came out ahead. Quiet wins count too.`;
+      } else if (hadIncome) {
+        headline = `You showed up for ${monthName}.`;
+        subline = `Tracked every dollar. That's the discipline that compounds.`;
+      } else {
+        headline = `${monthName} is closed.`;
+        subline = `Onward.`;
+      }
+
+      return (
+        <div className="celebration-back" onClick={onClose}>
+          {/* Confetti */}
+          <div className="confetti-layer" aria-hidden="true">
+            {pieces.map((p, i) => (
+              <div
+                key={i}
+                className="confetti-piece"
+                style={{
+                  left: p.x + '%',
+                  width: p.size + 'px',
+                  height: p.size + 'px',
+                  background: p.color,
+                  animationDelay: p.delay + 's',
+                  animationDuration: p.duration + 's',
+                  '--rotate': p.rotate + 'deg'
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="celebration-card" onClick={e=>e.stopPropagation()}>
+            <div className="celebration-mark" aria-hidden="true">
+              <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+                <path d="M20 18 Q12 14 6 8" stroke="var(--sage)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2"/>
+                <path d="M20 18 Q20 10 20 4" stroke="var(--blue)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2"/>
+                <path d="M20 18 Q28 14 34 8" stroke="var(--amber)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2"/>
+                <circle cx="6" cy="8" r="2" fill="var(--sage)"/>
+                <circle cx="20" cy="4" r="2" fill="var(--blue)"/>
+                <circle cx="34" cy="8" r="2" fill="var(--amber)"/>
+                <path d="M15 15 L17 12 L23 12 L25 15 Z" fill="var(--ink-2)"/>
+                <path d="M14 16 Q12 18 12 24 Q12 34 20 36 Q28 34 28 24 Q28 18 26 16 Z"
+                      fill="var(--terracotta)" stroke="var(--ink)" strokeWidth="0.8" strokeLinejoin="round"/>
+                <text x="20" y="29" textAnchor="middle"
+                      fontFamily="Georgia, serif" fontSize="11" fontWeight="600" fill="#fff">$</text>
+              </svg>
+            </div>
+
+            <h2 className="celebration-headline">{headline}</h2>
+            <div className="celebration-subline">{subline}</div>
+            {triggeredBy && (
+              <div style={{
+                fontSize: 12, color: 'var(--ink-3)',
+                marginTop: -8, marginBottom: 14,
+                fontFamily: "'Inter', sans-serif"
+              }}>
+                ✨ {triggeredBy} just closed out the month
+              </div>
+            )}
+
+            <div className="celebration-stats">
+              <div className="stat-block">
+                <div className="stat-block-label">Income</div>
+                <div className="stat-block-value num">{fmt(income)}</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-block-label">Spent</div>
+                <div className="stat-block-value num">{fmt(expenses)}</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-block-label">Saved</div>
+                <div className="stat-block-value num">{fmt(savings)}</div>
+              </div>
+              <div className="stat-block">
+                <div className="stat-block-label">Leftover</div>
+                <div className="stat-block-value num" style={{color: positiveLeftover ? 'var(--sage-ink)' : 'var(--terra-ink)'}}>
+                  {fmt(leftover)}
+                </div>
+              </div>
+            </div>
+
+            <div className="celebration-highlights">
+              {totalBudgetedCount > 0 && (
+                <div className="highlight">
+                  <span className="highlight-emoji">🎯</span>
+                  <span><strong>{underBudgetCount}</strong> of <strong>{totalBudgetedCount}</strong> categories under budget</span>
+                </div>
+              )}
+              {hadIncome && (
+                <div className="highlight">
+                  <span className="highlight-emoji">📈</span>
+                  <span>Savings rate of <strong>{(savingsRate*100).toFixed(0)}%</strong></span>
+                </div>
+              )}
+              {vsLastMonth !== null && vsLastMonth !== 0 && (
+                <div className="highlight">
+                  <span className="highlight-emoji">{vsLastMonth > 0 ? '⬆️' : '⬇️'}</span>
+                  <span>Net <strong>{vsLastMonth > 0 ? 'up' : 'down'} {fmt(Math.abs(vsLastMonth))}</strong> from last month</span>
+                </div>
+              )}
+              <div className="highlight">
+                <span className="highlight-emoji">📋</span>
+                <span><strong>{txCount}</strong> transaction{txCount === 1 ? '' : 's'} logged</span>
+              </div>
+              {perfectMonths >= 3 && (
+                <div className="highlight">
+                  <span className="highlight-emoji">🔥</span>
+                  <span><strong>{perfectMonths}</strong> closed-out months in a row. You two are dialed in.</span>
+                </div>
+              )}
+            </div>
+
+            <button className="btn btn-primary celebration-close" onClick={onClose}>
+              Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+    window.CelebrationModal = CelebrationModal;
   
 })();
 </script>
@@ -1981,7 +2571,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, LastEditedBy, GreetingCard, GreetingLine,
+    const { Bar, Donut, Spark, Sankey, FlowView, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -2096,20 +2686,51 @@
       // Expose state setters to supabase-client.js so it can apply
       // realtime updates from the other user. See the Realtime section
       // of supabase-client.js for the event handlers that call these.
+      // Stable ref so the bridge handlers (which run outside React's
+      // render lifecycle) can access the latest state.
+      const bridgeRef = React.useRef({});
+      bridgeRef.current = { closeouts, txs, budgetsByYear, year, monthIdx };
+
       useEffect(() => {
         window.__reactBridge = {
           setTxs,
           setBudgetsByYear,
-          // Category list extension (matches the local logic in addCategory)
           extendCategoryLists: (type, name) => {
             if (type === 'Income'   && !INCOME_CATS.includes(name))  INCOME_CATS.push(name);
             if (type === 'Expenses' && !EXPENSE_CATS.includes(name)) EXPENSE_CATS.push(name);
             if (type === 'Savings'  && !SAVINGS_CATS.includes(name)) SAVINGS_CATS.push(name);
+          },
+          // Called by supabase-client when the OTHER user closes out a
+          // month. Adds it to local state and fires the celebration on
+          // this session so both screens see it.
+          applyCloseoutInsert: ({ year, month, closed_at, closed_by, closed_by_name, isRemote }) => {
+            const mIdx = month - 1;
+            setCloseouts(prev => {
+              if (prev.some(c => c.year === year && c.month === month)) return prev;
+              return [...prev, { year, month, closed_at, closed_by }];
+            });
+            if (isRemote) {
+              // Use the ref to access fresh txs/budgets/closeouts state
+              const summary = buildSummaryFromRef(year, mIdx, bridgeRef.current);
+              if (closed_by_name) summary.triggeredBy = closed_by_name;
+              setCelebration(summary);
+            }
+          },
+          applyCloseoutDelete: ({ year, month }) => {
+            setCloseouts(prev => prev.filter(c => !(c.year === year && c.month === month)));
           }
         };
-        // Signal to supabase-client that React is ready for realtime
         if (window.__onReactReady) window.__onReactReady();
         return () => { window.__reactBridge = null; };
+      }, []);
+
+      // Load closeouts on mount (once we have a SupaStore)
+      useEffect(() => {
+        if (window.__SupaStore?.listCloseouts) {
+          window.__SupaStore.listCloseouts().then(rows => {
+            setCloseouts(rows || []);
+          });
+        }
       }, []);
 
       // Global keyboard shortcuts. Only fire when not already typing in
@@ -2192,6 +2813,14 @@
       });
       // Fast-entry command bar: opened by pressing /
       const [cmdOpen, setCmdOpen] = useState(false);
+
+      // Month closeouts: list of {year, month, closed_at} the current
+      // user has closed out. Loaded once on mount, updated locally as
+      // we close/reopen.
+      const [closeouts, setCloseouts] = useState([]);
+      // Celebration modal state. When set to a summary object, the
+      // modal opens with that data.
+      const [celebration, setCelebration] = useState(null);
       // Confirm-dialog state. Set to { title, message, onConfirm } to show;
       // null to hide.
       const [confirmState, setConfirmState] = useState(null);
@@ -2487,6 +3116,109 @@
         }
       };
 
+      // ---- Month closeout / celebration ----
+
+      // Look up whether a (year, month) is closed (household-wide).
+      const isClosed = (y, mIdx) =>
+        closeouts.some(c => c.year === y && c.month === mIdx + 1);
+
+      // Build a celebration summary. Works against an explicit data
+      // bundle so it can be called from realtime handlers (where it
+      // needs to use the ref) AND from local click handlers.
+      const buildSummaryFromRef = (y, mIdx, data) => {
+        const { txs, closeouts, budgetsByYear } = data;
+        const prefix = y + '-' + String(mIdx+1).padStart(2,'0');
+        const monthTxs = txs.filter(t => t.date.startsWith(prefix));
+        const inc = monthTxs.filter(t => t.type === 'Income').reduce((a,b)=>a+b.amount, 0);
+        const exp = monthTxs.filter(t => t.type === 'Expenses').reduce((a,b)=>a+b.amount, 0);
+        const sav = monthTxs.filter(t => t.type === 'Savings').reduce((a,b)=>a+b.amount, 0);
+        const leftover = inc - exp - sav;
+        const savingsRate = inc > 0 ? (inc - exp) / inc : 0;
+
+        const lastY = mIdx === 0 ? y - 1 : y;
+        const lastM = mIdx === 0 ? 11 : mIdx - 1;
+        const lastPrefix = lastY + '-' + String(lastM+1).padStart(2,'0');
+        const lastTxs = txs.filter(t => t.date.startsWith(lastPrefix));
+        const lastNet = lastTxs.filter(t=>t.type==='Income').reduce((a,b)=>a+b.amount, 0)
+                      - lastTxs.filter(t=>t.type==='Expenses').reduce((a,b)=>a+b.amount, 0);
+        const thisNet = inc - exp;
+        const vsLastMonth = lastTxs.length > 0 ? thisNet - lastNet : null;
+
+        const block = budgetsByYear[String(y)];
+        let underBudget = 0;
+        let totalBudgeted = 0;
+        if (block) {
+          const allRows = [...block.expenses, ...block.savings];
+          for (const row of allRows) {
+            const budget = row.months[mIdx] || 0;
+            if (budget <= 0) continue;
+            totalBudgeted++;
+            const actual = monthTxs
+              .filter(t => t.category === row.name && (t.type === 'Expenses' || t.type === 'Savings'))
+              .reduce((a,b)=>a+b.amount, 0);
+            if (actual <= budget) underBudget++;
+          }
+        }
+
+        // Closeout streak — consecutive closed months ending at (y, mIdx)
+        let streak = 1;
+        let cy = y, cm = mIdx;
+        while (true) {
+          if (cm === 0) { cy--; cm = 11; } else { cm--; }
+          if (closeouts.some(c => c.year === cy && c.month === cm + 1)) streak++;
+          else break;
+          if (streak > 60) break;
+        }
+
+        return {
+          monthName: MONTHS_LONG[mIdx],
+          year: y,
+          income: inc,
+          expenses: exp,
+          savings: sav,
+          leftover,
+          savingsRate,
+          txCount: monthTxs.length,
+          vsLastMonth,
+          underBudgetCount: underBudget,
+          totalBudgetedCount: totalBudgeted,
+          perfectMonths: streak
+        };
+      };
+
+      // Convenience wrapper that uses current React state.
+      const buildCelebrationSummary = (y, mIdx) =>
+        buildSummaryFromRef(y, mIdx, { txs, closeouts, budgetsByYear });
+
+      const closeOutMonth = (y, mIdx) => {
+        if (!window.__SupaStore?.closeMonth) return;
+        // Optimistic local insert
+        const newCloseout = { year: y, month: mIdx + 1, closed_at: new Date().toISOString() };
+        setCloseouts(prev => {
+          if (prev.some(c => c.year === y && c.month === mIdx + 1)) return prev;
+          return [...prev, newCloseout];
+        });
+        // Fire the celebration immediately on this session.
+        // (The remote session will get its own via the realtime INSERT.)
+        setCelebration(buildCelebrationSummary(y, mIdx));
+        window.__SupaStore.closeMonth({ year: y, month: mIdx + 1 }).catch(err => {
+          console.error('Closeout failed:', err);
+          setCloseouts(prev => prev.filter(c => !(c.year === y && c.month === mIdx + 1)));
+          alert('Could not save closeout: ' + err.message);
+        });
+      };
+
+      const reopenMonth = (y, mIdx) => {
+        if (!window.__SupaStore?.reopenMonth) return;
+        const snapshot = closeouts.find(c => c.year === y && c.month === mIdx + 1);
+        setCloseouts(prev => prev.filter(c => !(c.year === y && c.month === mIdx + 1)));
+        window.__SupaStore.reopenMonth({ year: y, month: mIdx + 1 }).catch(err => {
+          console.error('Reopen failed:', err);
+          if (snapshot) setCloseouts(prev => [...prev, snapshot]);
+          alert('Could not reopen month: ' + err.message);
+        });
+      };
+
       // Add a new category. Appended to every year's block (with zero budgets)
       // so it shows up consistently regardless of which year is selected.
       const addCategory = (type, name) => {
@@ -2612,6 +3344,11 @@
             onConfirm={() => confirmState?.onConfirm()}
             onClose={() => setConfirmState(null)}
           />
+          <CelebrationModal
+            open={!!celebration}
+            summary={celebration}
+            onClose={() => setCelebration(null)}
+          />
 
           {/* Topbar */}
           <div className="topbar">
@@ -2650,8 +3387,9 @@
                 <button className={view==='month'?'on':''} onClick={()=>setView('month')}>Month</button>
                 <button className={view==='year'?'on':''} onClick={()=>setView('year')}>Year</button>
                 <button className={view==='all'?'on':''} onClick={()=>setView('all')}>All time</button>
+                <button className={view==='flow'?'on':''} onClick={()=>setView('flow')}>Flow</button>
               </div>
-              {view === 'month' && (
+              {(view === 'month' || view === 'flow') && (
                 <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
                   {MONTHS_LONG.map((m,i) => <option key={i} value={i}>{m}</option>)}
                 </select>
@@ -2664,6 +3402,30 @@
             </div>
 
             <div className="actions">
+              {view === 'month' && (
+                isClosed(year, monthIdx) ? (
+                  <button className="btn"
+                    title="Month is closed — click to reopen"
+                    onClick={() => {
+                      setConfirmState({
+                        title: `Reopen ${MONTHS_LONG[monthIdx]} ${year}?`,
+                        message: 'You can close it out again later.',
+                        confirmLabel: 'Reopen',
+                        onConfirm: () => reopenMonth(year, monthIdx)
+                      });
+                    }}>
+                    <span style={{fontSize:14}}>🔒</span>
+                    Closed
+                  </button>
+                ) : (
+                  <button className="btn"
+                    title={`Close out ${MONTHS_LONG[monthIdx]} ${year}`}
+                    onClick={() => closeOutMonth(year, monthIdx)}>
+                    <span style={{fontSize:14}}>🎯</span>
+                    Close out {MONTHS[monthIdx]}
+                  </button>
+                )
+              )}
               <button className="btn" onClick={()=>setTweaksOpen(v=>!v)}>Theme</button>
               <button className="btn btn-primary" onClick={()=>setModalOpen(true)}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -2731,7 +3493,15 @@
             ))}
           </div>
 
-          {/* Main grid */}
+          {/* Flow view (Sankey) renders separately from the standard grid */}
+          {view === 'flow' ? (
+            <FlowView
+              txs={txs}
+              monthIdx={monthIdx}
+              year={year}
+              fmt={fmt}
+            />
+          ) : (
           <div className="main-grid">
             <div style={{display:'flex', flexDirection:'column', gap:18}}>
               {/* Categories table */}
@@ -2989,6 +3759,7 @@
               </div>
             </div>
           </div>
+          )}
 
           {/* Tweaks */}
           <div className={"tweaks-panel " + (tweaksOpen?'open':'')}>

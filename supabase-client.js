@@ -471,6 +471,49 @@
       rebuildCatIndexes();
       bumpLastEdited();
       return data.id;
+    },
+
+    // ---- Month closeouts (SHARED — household-wide) ----
+    // Mark a month as closed. The whole household sees it as closed.
+    // Returns the new closeout row, or null if it was already closed
+    // (handled gracefully so double-clicks don't error).
+    async closeMonth({ year, month }) {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      const { data, error } = await supabase
+        .from('month_closeouts')
+        .insert({ year, month, closed_by: userId })
+        .select()
+        .single();
+      if (error) {
+        if (error.code === '23505') return null;  // already closed
+        throw error;
+      }
+      return data;
+    },
+
+    // Reopen a closed month. Either person can do this.
+    async reopenMonth({ year, month }) {
+      const { error } = await supabase
+        .from('month_closeouts')
+        .delete()
+        .eq('year', year)
+        .eq('month', month);
+      if (error) throw error;
+    },
+
+    // Fetch all closeouts for the household.
+    async listCloseouts() {
+      const { data, error } = await supabase
+        .from('month_closeouts')
+        .select('year, month, closed_at, closed_by')
+        .order('year', { ascending: false })
+        .order('month', { ascending: false });
+      if (error) {
+        console.warn('Failed to fetch closeouts:', error);
+        return [];
+      }
+      return data || [];
     }
   };
   window.__SupaStore = SupaStore;
@@ -559,6 +602,18 @@
     markWritten('cat:' + id);
     return id;
   };
+  // Closeouts: mark before write so the realtime echo for OUR OWN
+  // closeout doesn't trigger a second celebration on the same session.
+  const _closeMonth = SupaStore.closeMonth;
+  SupaStore.closeMonth = async function(args) {
+    markWritten('closeout:' + args.year + '-' + args.month);
+    return _closeMonth.call(this, args);
+  };
+  const _reopenMonth = SupaStore.reopenMonth;
+  SupaStore.reopenMonth = async function(args) {
+    markWritten('closeout:' + args.year + '-' + args.month);
+    return _reopenMonth.call(this, args);
+  };
 
   // Events that arrive before React has mounted get buffered here.
   // drainPendingEvents() is called from __onReactReady (the React
@@ -599,6 +654,13 @@
       .on('postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'categories' },
           (payload) => queueOrRun(handleCategoryInsert, payload.new))
+      // Month closeouts (shared across the household)
+      .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'month_closeouts' },
+          (payload) => queueOrRun(handleCloseoutInsert, payload.new))
+      .on('postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'month_closeouts' },
+          (payload) => queueOrRun(handleCloseoutDelete, payload.old))
       .subscribe();
 
     // Expose so we can cleanly disconnect on logout (future phases)
@@ -711,6 +773,46 @@
     });
     bridge.extendCategoryLists(row.type, row.name);
     bumpRemoteEdit(row.created_by || row.updated_by);
+  }
+
+  // Closeout insert: someone closed out a month. Add it to React state
+  // and (if it wasn't this user) trigger the celebration.
+  async function handleCloseoutInsert(row) {
+    if (wasRecentlyWritten('closeout:' + row.year + '-' + row.month)) return;
+    const bridge = window.__reactBridge;
+    if (!bridge?.applyCloseoutInsert) return;
+    // Look up the name of who closed it for the celebration title
+    let closedByName = null;
+    if (row.closed_by) {
+      closedByName = profileNameCache.get(row.closed_by);
+      if (!closedByName) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', row.closed_by)
+          .single();
+        closedByName = data?.display_name || 'someone';
+        profileNameCache.set(row.closed_by, closedByName);
+      }
+    }
+    bridge.applyCloseoutInsert({
+      year: row.year,
+      month: row.month,
+      closed_at: row.closed_at,
+      closed_by: row.closed_by,
+      closed_by_name: closedByName,
+      isRemote: true   // tells React this was triggered by the OTHER session
+    });
+    bumpRemoteEdit(row.closed_by);
+  }
+
+  // Closeout delete: someone reopened a month.
+  function handleCloseoutDelete(row) {
+    if (wasRecentlyWritten('closeout:' + row.year + '-' + row.month)) return;
+    const bridge = window.__reactBridge;
+    if (!bridge?.applyCloseoutDelete) return;
+    bridge.applyCloseoutDelete({ year: row.year, month: row.month });
+    bumpRemoteEdit(null);
   }
 
   // When the OTHER user makes a change, update the "saved by" indicator.
