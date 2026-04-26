@@ -861,14 +861,15 @@
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name, theme')
+        .select('display_name, theme, last_view')
         .eq('id', user.id)
         .single();
       window.__currentUser = {
         id: user.id,
         email: user.email,
         displayName: profile?.display_name || user.email.split('@')[0],
-        theme: profile?.theme || 'warm'
+        theme: profile?.theme || 'warm',
+        lastView: profile?.last_view || null
       };
 
       // Reconcile theme: apply Supabase value to body immediately (in case
@@ -877,6 +878,12 @@
       if (profile?.theme && ['warm','cool','sage','dark'].includes(profile.theme)) {
         document.body.className = 'theme-' + profile.theme;
         try { localStorage.setItem('clements-budget-theme', profile.theme); } catch(e) {}
+      }
+
+      // Reconcile last view: same hybrid pattern as theme. Supabase value
+      // wins because it's the cross-device source of truth.
+      if (profile?.last_view && typeof profile.last_view === 'object') {
+        try { localStorage.setItem('clements-budget-last-view', JSON.stringify(profile.last_view)); } catch(e) {}
       }
 
       // Expose a helper so the React app can save theme changes back to
@@ -893,6 +900,28 @@
         } catch (err) {
           console.warn('Failed to sync theme to Supabase (will still work on this device):', err);
         }
+      };
+
+      // Save the user's last viewed page so it can be restored on next
+      // load. Debounced internally — calling this rapidly (e.g. while
+      // someone clicks through months) collapses to a single write.
+      let _saveViewTimer = null;
+      window.__saveLastView = function(viewState) {
+        if (!viewState || typeof viewState !== 'object') return;
+        // localStorage write is instant
+        try { localStorage.setItem('clements-budget-last-view', JSON.stringify(viewState)); } catch(e) {}
+        // Supabase write is debounced 1.5s — no need to hammer the DB
+        // every keystroke when the user is just exploring.
+        if (_saveViewTimer) clearTimeout(_saveViewTimer);
+        _saveViewTimer = setTimeout(() => {
+          supabase
+            .from('profiles')
+            .update({ last_view: viewState })
+            .eq('id', user.id)
+            .then(({ error }) => {
+              if (error) console.warn('Failed to sync last view:', error);
+            });
+        }, 1500);
       };
 
       // Set up realtime subscription BEFORE React mounts. Events that

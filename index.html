@@ -2794,28 +2794,60 @@
         return [...s].sort();
       }, [txs]);
 
+      // Read the user's last-viewed page from storage. We pull from
+      // localStorage first (fastest, set by supabase-client.js on login),
+      // and fall back to whatever was saved in the user object directly.
+      // Wrapped in try/catch because parsing user-data is always risky.
+      const lastView = (() => {
+        try {
+          const fromLS = localStorage.getItem('clements-budget-last-view');
+          if (fromLS) return JSON.parse(fromLS);
+        } catch (e) {}
+        return window.__currentUser?.lastView || null;
+      })();
+
+      // Helper: read a field from lastView with a fallback if missing
+      // or invalid. Defensive about types so a malformed cached value
+      // can't break the whole app.
+      const lv = (key, fallback, validate) => {
+        if (!lastView) return fallback;
+        const v = lastView[key];
+        if (v === undefined || v === null) return fallback;
+        if (validate && !validate(v)) return fallback;
+        return v;
+      };
+
       const [year, setYear] = useState(() => {
         const s = new Set(txs.map(t => parseInt(t.date.slice(0,4))).filter(y => !isNaN(y)));
         const ys = [...s].sort();
-        return ys[ys.length-1] || YEAR; // latest year with data
+        const latestWithData = ys[ys.length-1] || YEAR;
+        return lv('year', latestWithData, v =>
+          typeof v === 'number' && v >= 2020 && v <= 2099
+        );
       });
       const [monthIdx, setMonthIdx] = useState(() => {
         // default to last month of data in the selected year
         const latestYear = Math.max(...txs.map(t => parseInt(t.date.slice(0,4))).filter(y=>!isNaN(y)), YEAR);
         const inYear = txs.filter(t => parseInt(t.date.slice(0,4)) === latestYear);
-        if (inYear.length === 0) return 0;
-        return Math.max(...inYear.map(t => parseInt(t.date.slice(5,7))-1));
+        const latestMonth = inYear.length === 0 ? 0
+          : Math.max(...inYear.map(t => parseInt(t.date.slice(5,7))-1));
+        return lv('monthIdx', latestMonth, v =>
+          typeof v === 'number' && v >= 0 && v <= 11
+        );
       });
-      const [view, setView] = useState('month'); // 'month' | 'year' | 'all' | 'flow'
-      // When in 'flow' view, this controls which period the Sankey + the
-      // hero stats use. Decoupled from `view` so users can move freely
-      // between Month/Year/All-time within Flow without leaving Flow.
-      const [flowPeriod, setFlowPeriod] = useState('month'); // 'month' | 'year' | 'all'
+      const [view, setView] = useState(() =>
+        lv('view', 'month', v => ['month','year','all','flow'].includes(v))
+      );
+      const [flowPeriod, setFlowPeriod] = useState(() =>
+        lv('flowPeriod', 'month', v => ['month','year','all'].includes(v))
+      );
       // Effective view for stats computations. When the user is on the
       // Flow tab, the hero stats should reflect the period selected
       // within Flow (Month/Year/All time), not the literal 'flow' string.
       const statsView = view === 'flow' ? flowPeriod : view;
-      const [tab, setTab] = useState('all');
+      const [tab, setTab] = useState(() =>
+        lv('tab', 'all', v => ['all','Income','Expenses','Savings'].includes(v))
+      );
 
       // Derived: budget rows for the currently-selected year (stable type order: Income → Expenses → Savings)
       const budgetRows = useMemo(() => {
@@ -2914,6 +2946,17 @@
           });
         }
       }, []);
+
+      // Persist the last-viewed page whenever it changes. Saves to
+      // localStorage instantly + Supabase (debounced 1.5s inside the
+      // helper) so refreshes restore exactly what you were looking at,
+      // and other devices catch up shortly after.
+      useEffect(() => {
+        if (!window.__saveLastView) return;
+        window.__saveLastView({
+          view, monthIdx, year, tab, flowPeriod
+        });
+      }, [view, monthIdx, year, tab, flowPeriod]);
       // Initialize theme from (in priority order):
       //   1. Supabase profile (set by supabase-client.js on login)
       //   2. localStorage (set by the preload script in index.html head)
