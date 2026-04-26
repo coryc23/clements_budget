@@ -959,6 +959,27 @@
       const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
       return (neg ? '−' : '') + '$' + s;
     };
+    // Compact formatter — abbreviates thousands and millions to keep
+    // labels short in tight spaces (e.g. Sankey diagram labels).
+    //   $123       → $123
+    //   $1,234     → $1.2K
+    //   $146,892   → $147K
+    //   $1,234,567 → $1.2M
+    const fmtCompact = (n) => {
+      const neg = n < 0;
+      const abs = Math.abs(n);
+      let s;
+      if (abs >= 1_000_000) {
+        s = (abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1) + 'M';
+      } else if (abs >= 10_000) {
+        s = Math.round(abs / 1_000) + 'K';
+      } else if (abs >= 1_000) {
+        s = (abs / 1_000).toFixed(1) + 'K';
+      } else {
+        s = abs.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      }
+      return (neg ? '−' : '') + '$' + s;
+    };
     const fmtCents = (n) => {
       const neg = n < 0;
       const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1076,13 +1097,15 @@
       const { useState } = React;
       const [hover, setHover] = useState(null); // {sourceName, targetName, amount}
 
-      // Layout dimensions. Generous side margins (180px each) to fit the
-      // category labels + dollar amounts without clipping.
+      // Layout dimensions. Generous side margins (200px each) to fit the
+      // category labels + dollar amounts even with long names like
+      // "Renters Insurance" plus a $X,XXX value. Compact number format
+      // (fmtCompact) keeps amounts short for all-time views ($146K not $146,892).
       const W = 1000, H = 580;
       const NODE_W = 14;
       const PAD = 12;
       const TOP = 30, BOTTOM = 30;
-      const SIDE_MARGIN = 180;
+      const SIDE_MARGIN = 200;
       const usableH = H - TOP - BOTTOM;
 
       const totalIn = income.reduce((a,b)=>a+b.amount, 0);
@@ -1260,7 +1283,7 @@
                       textAnchor="end" fontSize="13" fill="var(--ink)" fontWeight="600"
                       style={{fontFamily: "'Fraunces', serif"}}>
                   {n.glyph || ''} {n.name}
-                  <tspan fill="var(--ink-3)" fontWeight="400" fontSize="11"> · {fmt(n.amount)}</tspan>
+                  <tspan fill="var(--ink-3)" fontWeight="400" fontSize="11"> · {fmtCompact(n.amount)}</tspan>
                 </text>
               ))}
             </g>
@@ -1271,7 +1294,7 @@
                       textAnchor="middle" fontSize="13" fill="var(--ink)" fontWeight="600"
                       style={{fontFamily: "'Fraunces', serif"}}>
                   {n.glyph} {n.name}
-                  <tspan fill="var(--ink-3)" fontWeight="400" fontSize="11"> · {fmt(n.amount)}</tspan>
+                  <tspan fill="var(--ink-3)" fontWeight="400" fontSize="11"> · {fmtCompact(n.amount)}</tspan>
                 </text>
               ))}
             </g>
@@ -1282,7 +1305,7 @@
                       textAnchor="start" fontSize="12" fill="var(--ink)"
                       style={{fontFamily: "'Inter', sans-serif"}}>
                   {n.glyph || ''} {n.name}
-                  <tspan fill="var(--ink-3)" fontSize="11"> · {fmt(n.amount)}</tspan>
+                  <tspan fill="var(--ink-3)" fontSize="11"> · {fmtCompact(n.amount)}</tspan>
                 </text>
               ))}
             </g>
@@ -2129,7 +2152,7 @@
     }
     window.FlowView = FlowView;
 
-    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtSigned });
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
   
 })();
 </script>
