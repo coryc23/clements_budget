@@ -514,6 +514,102 @@
         return [];
       }
       return data || [];
+    },
+
+    // ---- Accounts (net worth tracking) ----
+    async listAccounts() {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('*')
+        .order('group_key')
+        .order('sort_order');
+      if (error) {
+        console.warn('Failed to fetch accounts:', error);
+        return [];
+      }
+      return data || [];
+    },
+
+    async listSnapshots() {
+      const { data, error } = await supabase
+        .from('balance_snapshots')
+        .select('id, account_id, balance, snapshot_date, recorded_at')
+        .order('snapshot_date', { ascending: true });
+      if (error) {
+        console.warn('Failed to fetch snapshots:', error);
+        return [];
+      }
+      return data || [];
+    },
+
+    // Update an account's balance. Creates a snapshot AND updates the
+    // current_balance field on the account itself for fast reads.
+    // Returns the new snapshot row.
+    async updateBalance({ accountId, balance, snapshotDate }) {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+
+      // Insert snapshot
+      const { data: snapshot, error: snapErr } = await supabase
+        .from('balance_snapshots')
+        .insert({
+          account_id: accountId,
+          balance: balance,
+          snapshot_date: snapshotDate || new Date().toISOString().slice(0, 10),
+          recorded_by: userId
+        })
+        .select()
+        .single();
+      if (snapErr) throw snapErr;
+
+      // Update the account's current balance + last_updated_at
+      const { error: acctErr } = await supabase
+        .from('accounts')
+        .update({
+          current_balance: balance,
+          last_updated_at: new Date().toISOString()
+        })
+        .eq('id', accountId);
+      if (acctErr) throw acctErr;
+
+      bumpLastEdited();
+      return snapshot;
+    },
+
+    // Delete a snapshot (e.g. user entered a wrong number). After
+    // deletion, the account's current_balance falls back to the most
+    // recent remaining snapshot's balance.
+    async deleteSnapshot({ snapshotId, accountId }) {
+      const { error } = await supabase
+        .from('balance_snapshots')
+        .delete()
+        .eq('id', snapshotId);
+      if (error) throw error;
+
+      // Recompute current_balance from the most recent remaining snapshot
+      const { data: latest } = await supabase
+        .from('balance_snapshots')
+        .select('balance, snapshot_date')
+        .eq('account_id', accountId)
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latest) {
+        await supabase
+          .from('accounts')
+          .update({
+            current_balance: latest.balance,
+            last_updated_at: new Date().toISOString()
+          })
+          .eq('id', accountId);
+      } else {
+        // No snapshots left — reset to 0
+        await supabase
+          .from('accounts')
+          .update({ current_balance: 0 })
+          .eq('id', accountId);
+      }
+      bumpLastEdited();
     }
   };
   window.__SupaStore = SupaStore;
@@ -614,6 +710,21 @@
     markWritten('closeout:' + args.year + '-' + args.month);
     return _reopenMonth.call(this, args);
   };
+  // Net worth: suppress our own echoes so we don't double-apply local
+  // optimistic updates when realtime events come back at us.
+  const _updateBalance = SupaStore.updateBalance;
+  SupaStore.updateBalance = async function(args) {
+    markWritten('account:' + args.accountId);
+    const snap = await _updateBalance.call(this, args);
+    if (snap) markWritten('snapshot:' + snap.id);
+    return snap;
+  };
+  const _deleteSnapshot = SupaStore.deleteSnapshot;
+  SupaStore.deleteSnapshot = async function(args) {
+    markWritten('snapshot:' + args.snapshotId);
+    markWritten('account:' + args.accountId);
+    return _deleteSnapshot.call(this, args);
+  };
 
   // Events that arrive before React has mounted get buffered here.
   // drainPendingEvents() is called from __onReactReady (the React
@@ -661,6 +772,16 @@
       .on('postgres_changes',
           { event: 'DELETE', schema: 'public', table: 'month_closeouts' },
           (payload) => queueOrRun(handleCloseoutDelete, payload.old))
+      // Net worth: accounts + balance snapshots
+      .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'accounts' },
+          (payload) => queueOrRun(handleAccountUpdate, payload.new))
+      .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'balance_snapshots' },
+          (payload) => queueOrRun(handleSnapshotInsert, payload.new))
+      .on('postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'balance_snapshots' },
+          (payload) => queueOrRun(handleSnapshotDelete, payload.old))
       .subscribe();
 
     // Expose so we can cleanly disconnect on logout (future phases)
@@ -812,6 +933,33 @@
     const bridge = window.__reactBridge;
     if (!bridge?.applyCloseoutDelete) return;
     bridge.applyCloseoutDelete({ year: row.year, month: row.month });
+    bumpRemoteEdit(null);
+  }
+
+  // Account UPDATE: someone updated an account's current_balance.
+  function handleAccountUpdate(row) {
+    if (wasRecentlyWritten('account:' + row.id)) return;
+    const bridge = window.__reactBridge;
+    if (!bridge?.applyAccountUpdate) return;
+    bridge.applyAccountUpdate(row);
+    bumpRemoteEdit(null);
+  }
+
+  // Snapshot INSERT: balance update happened, history needs updating.
+  function handleSnapshotInsert(row) {
+    if (wasRecentlyWritten('snapshot:' + row.id)) return;
+    const bridge = window.__reactBridge;
+    if (!bridge?.applySnapshotInsert) return;
+    bridge.applySnapshotInsert(row);
+    bumpRemoteEdit(row.recorded_by);
+  }
+
+  // Snapshot DELETE: history row removed.
+  function handleSnapshotDelete(row) {
+    if (wasRecentlyWritten('snapshot:' + row.id)) return;
+    const bridge = window.__reactBridge;
+    if (!bridge?.applySnapshotDelete) return;
+    bridge.applySnapshotDelete({ id: row.id, account_id: row.account_id });
     bumpRemoteEdit(null);
   }
 

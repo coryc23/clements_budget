@@ -2152,7 +2152,401 @@
     }
     window.FlowView = FlowView;
 
-    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
+    // ============================================================
+    // NET WORTH
+    // ============================================================
+    // Group definitions — name, emoji, ordered list of group_keys to
+    // pull from. Drives the section headers in NetWorthView.
+    const NW_GROUPS = [
+      { key: 'liquid',            label: 'Liquid Assets',          emoji: '💵', kind: 'asset' },
+      { key: 'ira',               label: 'IRAs',                   emoji: '📈', kind: 'asset' },
+      { key: 'retirement_yours',  label: 'Retirement · Cory',      emoji: '🏛️', kind: 'asset' },
+      { key: 'retirement_wife',   label: 'Retirement · Wife',      emoji: '🏛️', kind: 'asset' },
+      { key: 'retirement_old',    label: 'Old Employer Accounts',  emoji: '📦', kind: 'asset' },
+      { key: 'family',            label: 'Family',                 emoji: '👶', kind: 'asset' },
+      { key: 'vehicle',           label: 'Vehicles',               emoji: '🚗', kind: 'asset' },
+      { key: 'liability',         label: 'Liabilities',            emoji: '📉', kind: 'liability' }
+    ];
+
+    // BalanceUpdateModal — opened when the user clicks "Update" on an
+    // account row. Shows the current balance, date, and a free-text
+    // notes field. On submit, saves a new snapshot.
+    var BalanceUpdateModal = function({ account, snapshots, onClose, onSave, onDeleteSnapshot }) {
+      const { useState, useEffect, useRef } = React;
+      if (!account) return null;
+      const [balance, setBalance] = useState(account.current_balance != null ? String(account.current_balance) : '');
+      const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+      const [showHistory, setShowHistory] = useState(false);
+      const inputRef = useRef(null);
+
+      useEffect(() => {
+        // Auto-focus and select the balance input
+        const t = setTimeout(() => {
+          inputRef.current?.focus();
+          inputRef.current?.select();
+        }, 50);
+        return () => clearTimeout(t);
+      }, []);
+
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [onClose]);
+
+      const submit = (e) => {
+        if (e) e.preventDefault();
+        const num = parseFloat(balance);
+        if (isNaN(num) || num < 0) {
+          alert('Enter a valid non-negative balance.');
+          return;
+        }
+        onSave({ accountId: account.id, balance: num, snapshotDate: date });
+      };
+
+      // Filter snapshots for this account, latest first
+      const accountSnapshots = (snapshots || [])
+        .filter(s => s.account_id === account.id)
+        .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
+
+      return (
+        <div className="modal-back" onClick={onClose}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{width: 460}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom: 16}}>
+              <h3 className="serif" style={{margin:0, fontSize: 20}}>{account.name}</h3>
+              <button onClick={onClose} style={{color:'var(--ink-3)', fontSize:18}}>×</button>
+            </div>
+            {account.notes && (
+              <div style={{fontSize: 12, color: 'var(--ink-3)', marginBottom: 14, fontStyle: 'italic'}}>
+                {account.notes}
+              </div>
+            )}
+
+            <form onSubmit={submit}>
+              <div className="modal-row">
+                <label>Balance</label>
+                <input
+                  ref={inputRef}
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={balance}
+                  onChange={e=>setBalance(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="modal-row">
+                <label>As of date</label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={e=>setDate(e.target.value)}
+                />
+              </div>
+
+              <div className="modal-actions" style={{marginTop: 18}}>
+                <button type="button" className="btn" onClick={onClose}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save balance</button>
+              </div>
+            </form>
+
+            {accountSnapshots.length > 0 && (
+              <div style={{marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--line)'}}>
+                <button
+                  type="button"
+                  onClick={() => setShowHistory(v => !v)}
+                  style={{
+                    fontSize: 12, color: 'var(--ink-3)', textTransform: 'uppercase',
+                    letterSpacing: '0.06em', fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  {showHistory ? '▼' : '▶'} History ({accountSnapshots.length})
+                </button>
+                {showHistory && (
+                  <div style={{marginTop: 10, maxHeight: 200, overflowY: 'auto'}}>
+                    {accountSnapshots.map(s => (
+                      <div key={s.id} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '6px 0', borderBottom: '1px solid var(--line)',
+                        fontSize: 13
+                      }}>
+                        <span style={{color: 'var(--ink-3)'}}>{s.snapshot_date}</span>
+                        <span className="num" style={{fontWeight: 500}}>{fmt(s.balance)}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm('Delete this snapshot? The current balance will fall back to the next most recent snapshot.')) {
+                              onDeleteSnapshot({ snapshotId: s.id, accountId: account.id });
+                            }
+                          }}
+                          style={{
+                            color: 'var(--ink-3)', fontSize: 11,
+                            padding: '2px 8px', cursor: 'pointer'
+                          }}
+                          title="Delete this snapshot"
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    window.BalanceUpdateModal = BalanceUpdateModal;
+
+    // Format "X days ago", "yesterday", "today" — used for the
+    // "last updated" indicator on each account row.
+    function timeSince(iso) {
+      if (!iso) return 'never';
+      const then = new Date(iso);
+      const now = new Date();
+      const days = Math.floor((now - then) / (1000 * 60 * 60 * 24));
+      if (days < 1) return 'today';
+      if (days === 1) return 'yesterday';
+      if (days < 7) return `${days} days ago`;
+      if (days < 30) return `${Math.floor(days/7)} weeks ago`;
+      if (days < 365) return `${Math.floor(days/30)} months ago`;
+      return `${Math.floor(days/365)}+ years ago`;
+    }
+
+    // Whether an account's balance is "stale" enough to warrant a nudge.
+    // Different account types have different reasonable cadences.
+    function staleDays(group_key) {
+      if (group_key === 'vehicle') return 180;   // twice a year for cars
+      if (group_key === 'liquid') return 30;     // monthly for cash
+      return 60;                                  // ~bi-monthly default
+    }
+    function isStale(account) {
+      if (!account.last_updated_at) return true;
+      const days = (Date.now() - new Date(account.last_updated_at).getTime()) / (1000*60*60*24);
+      return days > staleDays(account.group_key);
+    }
+
+    // NetWorthView — full Net Worth page. Shows total + history chart,
+    // then a list of account groups, each with their accounts and
+    // current balances.
+    var NetWorthView = function({ accounts, snapshots, onUpdateBalance, onDeleteSnapshot }) {
+      const { useState, useMemo } = React;
+      const [editingAccount, setEditingAccount] = useState(null);
+
+      // Compute totals
+      const totals = useMemo(() => {
+        let assets = 0, liabilities = 0;
+        for (const a of accounts) {
+          if (a.kind === 'asset') assets += parseFloat(a.current_balance) || 0;
+          else liabilities += parseFloat(a.current_balance) || 0;
+        }
+        return { assets, liabilities, net: assets - liabilities };
+      }, [accounts]);
+
+      // Group totals
+      const groupTotals = useMemo(() => {
+        const m = {};
+        for (const g of NW_GROUPS) m[g.key] = 0;
+        for (const a of accounts) {
+          if (m[a.group_key] !== undefined) {
+            m[a.group_key] += parseFloat(a.current_balance) || 0;
+          }
+        }
+        return m;
+      }, [accounts]);
+
+      // Build net worth time series from snapshots.
+      // Strategy: sample every month; for each month, take the most
+      // recent balance for each account as of that month's end.
+      const history = useMemo(() => {
+        if (snapshots.length === 0) return [];
+        const sorted = [...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+        const startDate = new Date(sorted[0].snapshot_date);
+        const endDate = new Date();
+        // Generate month buckets from start to today
+        const months = [];
+        let y = startDate.getFullYear(), m = startDate.getMonth();
+        const endY = endDate.getFullYear(), endM = endDate.getMonth();
+        while (y < endY || (y === endY && m <= endM)) {
+          months.push({ y, m, label: y + '-' + String(m+1).padStart(2,'0') });
+          m++; if (m > 11) { m = 0; y++; }
+        }
+        // For each month, walk through snapshots up to month-end and
+        // keep the latest balance per account
+        const result = [];
+        for (const month of months) {
+          const cutoff = new Date(month.y, month.m + 1, 0).toISOString().slice(0,10);
+          const balances = new Map();
+          for (const s of sorted) {
+            if (s.snapshot_date > cutoff) break;
+            balances.set(s.account_id, parseFloat(s.balance) || 0);
+          }
+          // Net worth = sum of balances, weighted by kind
+          let net = 0;
+          for (const [aid, bal] of balances) {
+            const acct = accounts.find(a => a.id === aid);
+            if (!acct) continue;
+            net += acct.kind === 'asset' ? bal : -bal;
+          }
+          result.push({ label: month.label, net });
+        }
+        return result;
+      }, [snapshots, accounts]);
+
+      // Change since last month (most recent vs second-most-recent in history)
+      const changeFromLast = (history.length >= 2)
+        ? history[history.length-1].net - history[history.length-2].net
+        : null;
+
+      // Total snapshot count across all accounts (for the "no data yet" check)
+      const hasAnyData = snapshots.length > 0;
+
+      return (
+        <div className="card" style={{padding: '24px 26px'}}>
+          {/* Big headline */}
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 16}}>
+            <div>
+              <div style={{fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 6}}>
+                Total net worth
+              </div>
+              <div style={{fontSize: 42, fontFamily: "'Fraunces', serif", fontWeight: 500, color: 'var(--ink)', lineHeight: 1, letterSpacing: '-0.02em'}}>
+                {fmt(totals.net)}
+              </div>
+              <div style={{fontSize: 13, color: 'var(--ink-3)', marginTop: 8, fontFamily: "'Fraunces', serif", fontStyle: 'italic'}}>
+                {fmt(totals.assets)} in assets · {fmt(totals.liabilities)} in debt
+                {changeFromLast !== null && (
+                  <span style={{marginLeft: 12, color: changeFromLast >= 0 ? 'var(--sage-ink)' : 'var(--terra-ink)', fontStyle: 'normal'}}>
+                    {changeFromLast >= 0 ? '↑' : '↓'} {fmt(Math.abs(changeFromLast))} this month
+                  </span>
+                )}
+              </div>
+            </div>
+            {history.length >= 2 && (
+              <div style={{width: 280, flexShrink: 0}}>
+                <div style={{fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 8, textAlign: 'right'}}>
+                  History
+                </div>
+                <Spark data={history.map(h => h.net)} color="var(--sage)"/>
+                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)', marginTop: 4}}>
+                  <span>{history[0].label}</span>
+                  <span>{history[history.length-1].label}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!hasAnyData && (
+            <div style={{
+              padding: '20px 22px', background: 'var(--bg-soft)', borderRadius: 12,
+              marginBottom: 22, fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.6
+            }}>
+              <div style={{fontFamily: "'Fraunces', serif", fontStyle: 'italic', fontSize: 16, marginBottom: 6}}>
+                Let's get a snapshot of where you are right now.
+              </div>
+              Click <strong>Update</strong> on each account below and enter the current balance.
+              You don't have to do them all at once — start with what you know.
+              The history chart will appear once you have a couple months of data.
+            </div>
+          )}
+
+          {/* Group cards */}
+          <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+            {NW_GROUPS.map(g => {
+              const accts = accounts.filter(a => a.group_key === g.key)
+                .sort((a, b) => a.sort_order - b.sort_order);
+              if (accts.length === 0) return null;
+              const total = groupTotals[g.key];
+              return (
+                <div key={g.key} style={{
+                  border: '1px solid var(--line)', borderRadius: 14,
+                  background: 'var(--bg-elev)', overflow: 'hidden'
+                }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 20px', background: 'var(--bg-soft)',
+                    borderBottom: '1px solid var(--line)'
+                  }}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+                      <span style={{fontSize: 18}}>{g.emoji}</span>
+                      <span style={{fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 500, color: 'var(--ink)'}}>
+                        {g.label}
+                      </span>
+                    </div>
+                    <span className="num" style={{
+                      fontSize: 16, fontWeight: 600,
+                      color: g.kind === 'liability' ? 'var(--terra-ink)' : 'var(--ink)'
+                    }}>
+                      {g.kind === 'liability' ? '−' : ''}{fmt(total)}
+                    </span>
+                  </div>
+                  <div>
+                    {accts.map(a => (
+                      <div key={a.id} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto auto',
+                        gap: 16, alignItems: 'center',
+                        padding: '12px 20px',
+                        borderBottom: '1px solid var(--line)'
+                      }}>
+                        <div>
+                          <div style={{fontWeight: 500, fontSize: 14, color: 'var(--ink)'}}>{a.name}</div>
+                          <div style={{fontSize: 11, color: 'var(--ink-3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8}}>
+                            <span>Updated {timeSince(a.last_updated_at)}</span>
+                            {isStale(a) && a.current_balance > 0 && (
+                              <span style={{color: 'var(--amber-ink)', fontWeight: 500}}>· stale</span>
+                            )}
+                            {a.notes && <span style={{fontStyle: 'italic'}}>· {a.notes}</span>}
+                          </div>
+                        </div>
+                        <div className="num" style={{
+                          fontSize: 15, fontWeight: 500,
+                          color: a.current_balance > 0 ? 'var(--ink)' : 'var(--ink-3)'
+                        }}>
+                          {fmt(parseFloat(a.current_balance) || 0)}
+                        </div>
+                        <button
+                          className="btn"
+                          onClick={() => setEditingAccount(a)}
+                          style={{fontSize: 12, padding: '6px 12px'}}
+                        >Update</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{
+            marginTop: 18, padding: '12px 16px',
+            background: 'var(--bg-soft)', borderRadius: 10,
+            fontSize: 12, color: 'var(--ink-3)',
+            fontStyle: 'italic', fontFamily: "'Fraunces', serif"
+          }}>
+            Update balances when convenient — there's no schedule. Cars are usually
+            fine to update twice a year. Liquid accounts are more interesting monthly.
+          </div>
+
+          {editingAccount && (
+            <BalanceUpdateModal
+              account={editingAccount}
+              snapshots={snapshots}
+              onClose={() => setEditingAccount(null)}
+              onSave={(args) => {
+                onUpdateBalance(args);
+                setEditingAccount(null);
+              }}
+              onDeleteSnapshot={(args) => {
+                onDeleteSnapshot(args);
+                // Don't close the modal — let them keep adjusting
+              }}
+            />
+          )}
+        </div>
+      );
+    }
+    window.NetWorthView = NetWorthView;
+
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, BalanceUpdateModal, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
   
 })();
 </script>
@@ -2648,7 +3042,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, Sankey, FlowView, ACCENTS, fmt, fmtCents, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
+    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -2836,7 +3230,7 @@
         );
       });
       const [view, setView] = useState(() =>
-        lv('view', 'month', v => ['month','year','all','flow'].includes(v))
+        lv('view', 'month', v => ['month','year','all','flow','networth'].includes(v))
       );
       const [flowPeriod, setFlowPeriod] = useState(() =>
         lv('flowPeriod', 'month', v => ['month','year','all'].includes(v))
@@ -2896,6 +3290,10 @@
       // Confirm-dialog state. Set to { title, message, onConfirm } to show;
       // null to hide.
       const [confirmState, setConfirmState] = useState(null);
+      // Net worth tracking — accounts (current balances) + snapshot
+      // history. Both are shared household-wide and synced via realtime.
+      const [accounts, setAccounts] = useState([]);
+      const [snapshots, setSnapshots] = useState([]);
 
       // Stable ref so the bridge handlers (which run outside React's
       // render lifecycle) can access the latest state. Kept up to date
@@ -2932,6 +3330,19 @@
           },
           applyCloseoutDelete: ({ year, month }) => {
             setCloseouts(prev => prev.filter(c => !(c.year === year && c.month === month)));
+          },
+          // Net worth realtime hooks
+          applyAccountUpdate: (row) => {
+            setAccounts(prev => prev.map(a => a.id === row.id ? { ...a, ...row } : a));
+          },
+          applySnapshotInsert: (row) => {
+            setSnapshots(prev => {
+              if (prev.some(s => s.id === row.id)) return prev;
+              return [...prev, row];
+            });
+          },
+          applySnapshotDelete: ({ id }) => {
+            setSnapshots(prev => prev.filter(s => s.id !== id));
           }
         };
         if (window.__onReactReady) window.__onReactReady();
@@ -2944,6 +3355,17 @@
           window.__SupaStore.listCloseouts().then(rows => {
             setCloseouts(rows || []);
           });
+        }
+      }, []);
+
+      // Load accounts + snapshots on mount
+      useEffect(() => {
+        if (!window.__SupaStore) return;
+        if (window.__SupaStore.listAccounts) {
+          window.__SupaStore.listAccounts().then(rows => setAccounts(rows || []));
+        }
+        if (window.__SupaStore.listSnapshots) {
+          window.__SupaStore.listSnapshots().then(rows => setSnapshots(rows || []));
         }
       }, []);
 
@@ -3352,6 +3774,66 @@
         });
       };
 
+      // ---- Net worth handlers ----
+
+      // Update an account's balance. Optimistic: update accounts state
+      // and add a temporary snapshot row immediately, then persist.
+      const handleUpdateBalance = ({ accountId, balance, snapshotDate }) => {
+        if (!window.__SupaStore?.updateBalance) return;
+        // Optimistic: bump local state
+        const tempId = 'temp-' + Date.now();
+        setAccounts(prev => prev.map(a =>
+          a.id === accountId
+            ? { ...a, current_balance: balance, last_updated_at: new Date().toISOString() }
+            : a
+        ));
+        setSnapshots(prev => [...prev, {
+          id: tempId,
+          account_id: accountId,
+          balance: balance,
+          snapshot_date: snapshotDate || new Date().toISOString().slice(0, 10),
+          recorded_at: new Date().toISOString()
+        }]);
+        // Persist
+        window.__SupaStore.updateBalance({ accountId, balance, snapshotDate })
+          .then(realSnap => {
+            // Replace the temp snapshot with the real one
+            if (realSnap) {
+              setSnapshots(prev => prev.map(s => s.id === tempId ? realSnap : s));
+            }
+          })
+          .catch(err => {
+            console.error('Balance update failed:', err);
+            // Roll back the temp snapshot
+            setSnapshots(prev => prev.filter(s => s.id !== tempId));
+            alert('Could not save balance update: ' + err.message);
+          });
+      };
+
+      const handleDeleteSnapshot = ({ snapshotId, accountId }) => {
+        if (!window.__SupaStore?.deleteSnapshot) return;
+        const removed = snapshots.find(s => s.id === snapshotId);
+        // Optimistic: remove it
+        setSnapshots(prev => prev.filter(s => s.id !== snapshotId));
+        // Recompute account's current balance from remaining snapshots
+        const remaining = snapshots.filter(s => s.account_id === accountId && s.id !== snapshotId);
+        if (remaining.length > 0) {
+          const latest = [...remaining].sort((a,b) => b.snapshot_date.localeCompare(a.snapshot_date))[0];
+          setAccounts(prev => prev.map(a =>
+            a.id === accountId ? { ...a, current_balance: parseFloat(latest.balance) } : a
+          ));
+        } else {
+          setAccounts(prev => prev.map(a =>
+            a.id === accountId ? { ...a, current_balance: 0 } : a
+          ));
+        }
+        window.__SupaStore.deleteSnapshot({ snapshotId, accountId }).catch(err => {
+          console.error('Snapshot delete failed:', err);
+          if (removed) setSnapshots(prev => [...prev, removed]);
+          alert('Could not delete snapshot: ' + err.message);
+        });
+      };
+
       // Add a new category. Appended to every year's block (with zero budgets)
       // so it shows up consistently regardless of which year is selected.
       const addCategory = (type, name) => {
@@ -3521,6 +4003,7 @@
                 <button className={view==='year'?'on':''} onClick={()=>setView('year')}>Year</button>
                 <button className={view==='all'?'on':''} onClick={()=>setView('all')}>All time</button>
                 <button className={view==='flow'?'on':''} onClick={()=>setView('flow')}>Flow</button>
+                <button className={view==='networth'?'on':''} onClick={()=>setView('networth')}>Net Worth</button>
               </div>
               {view === 'month' && (
                 <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
@@ -3570,7 +4053,9 @@
           {/* Personalized greeting line with time-of-day emoji */}
           <GreetingLine />
 
-          {/* Hero */}
+          {/* Hero — cash flow stats. Hidden in networth view since
+              that page is about balance, not flow. */}
+          {view !== 'networth' && (
           <div className="hero">
             <div className="card feature">
               <div>
@@ -3615,10 +4100,11 @@
               </div>
             </div>
           </div>
+          )}
 
           {/* Allocation strip + category tabs — these belong to the budget
               table view, so we hide them on the Flow tab. */}
-          {view !== 'flow' && (
+          {view !== 'flow' && view !== 'networth' && (
             <>
               <AllocationStrip totals={totals} view={statsView} year={year} monthName={MONTHS[monthIdx]}/>
               <div className="tabs">
@@ -3641,6 +4127,13 @@
               period={flowPeriod}
               setPeriod={setFlowPeriod}
               fmt={fmt}
+            />
+          ) : view === 'networth' ? (
+            <NetWorthView
+              accounts={accounts}
+              snapshots={snapshots}
+              onUpdateBalance={handleUpdateBalance}
+              onDeleteSnapshot={handleDeleteSnapshot}
             />
           ) : (
           <div className="main-grid">
