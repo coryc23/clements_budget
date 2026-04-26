@@ -120,10 +120,27 @@
   .view-switch .seg { display: inline-flex; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
   .view-switch .seg button { padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--ink-3); transition: all 0.15s; }
   .view-switch .seg button:hover { color: var(--ink-2); }
-  .view-switch .seg button.on { background: var(--ink); color: var(--bg); }
-  .view-switch select { padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev); font-weight: 500; font-size: 13px; color: var(--ink); cursor: pointer; }
-  .view-switch select:hover { border-color: var(--line-strong); }
-  .view-switch select:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .view-switch .seg button.on { background: var(--ink); color: var(--bg); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+  /* Pill-shaped period selectors. Used in the topbar (.view-switch) and
+     also inside the FlowView's period selector — so the styling lives on
+     the .select-month / .select-year classes themselves, not nested. */
+  .select-month, .select-year {
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--bg-elev); font-weight: 500; font-size: 13px;
+    color: var(--ink); cursor: pointer;
+  }
+  .select-month:hover, .select-year:hover { border-color: var(--line-strong); }
+  .select-month:focus, .select-year:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px var(--blue-soft); }
+  /* Ensure dropdown options follow the theme too — Firefox especially
+     defaults to white-on-white in dark mode without this. */
+  .select-month option, .select-year option { background: var(--bg-elev); color: var(--ink); }
+
+  /* Generic seg style (matches .view-switch .seg) so the FlowView
+     period switcher uses the same look without needing the wrapper. */
+  .seg { display: inline-flex; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+  .seg button { padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--ink-3); transition: all 0.15s; }
+  .seg button:hover { color: var(--ink-2); }
+  .seg button.on { background: var(--ink); color: var(--bg); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
 
   .actions { display: flex; gap: 8px; }
   .btn { border: 1px solid var(--line); background: var(--bg-elev); padding: 8px 14px; border-radius: 10px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
@@ -1993,14 +2010,9 @@
     // FlowView — wraps the Sankey diagram with month context.
     // Computes income/expense/savings groupings for the chosen period
     // and renders the Sankey alongside summary stats and copy.
-    var FlowView = function({ txs, monthIdx, year, setMonthIdx, setYear, years, fmt }) {
-      const { useState } = React;
+    var FlowView = function({ txs, monthIdx, year, setMonthIdx, setYear, years, fmt, period, setPeriod }) {
       const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      // Period inside the Flow view. Defaults to 'month' to match the
-      // initial app behavior. Stored locally — switching back to other
-      // tabs preserves the regular view state.
-      const [period, setPeriod] = useState('month');
 
       // Filter transactions based on the active period
       let filtered, periodLabel;
@@ -2771,7 +2783,15 @@
         if (inYear.length === 0) return 0;
         return Math.max(...inYear.map(t => parseInt(t.date.slice(5,7))-1));
       });
-      const [view, setView] = useState('month'); // 'month' | 'year' | 'all'
+      const [view, setView] = useState('month'); // 'month' | 'year' | 'all' | 'flow'
+      // When in 'flow' view, this controls which period the Sankey + the
+      // hero stats use. Decoupled from `view` so users can move freely
+      // between Month/Year/All-time within Flow without leaving Flow.
+      const [flowPeriod, setFlowPeriod] = useState('month'); // 'month' | 'year' | 'all'
+      // Effective view for stats computations. When the user is on the
+      // Flow tab, the hero stats should reflect the period selected
+      // within Flow (Month/Year/All time), not the literal 'flow' string.
+      const statsView = view === 'flow' ? flowPeriod : view;
       const [tab, setTab] = useState('all');
 
       // Derived: budget rows for the currently-selected year (stable type order: Income → Expenses → Savings)
@@ -2937,16 +2957,16 @@
       const actualsByCat = useMemo(()=>{
         const map = {};
         let prefix = null;
-        if (view === 'month') prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
-        else if (view === 'year') prefix = year + '-';
-        // view === 'all' → no prefix, include everything
+        if (statsView === 'month') prefix = year + '-' + String(monthIdx+1).padStart(2,'0');
+        else if (statsView === 'year') prefix = year + '-';
+        // statsView === 'all' → no prefix, include everything
         for (const t of txs) {
           if (prefix && !t.date.startsWith(prefix)) continue;
           const key = t.type + '|' + t.category;
           map[key] = (map[key] || 0) + t.amount;
         }
         return map;;
-      }, [txs, monthIdx, year, view]);
+      }, [txs, monthIdx, year, statsView]);
 
       // attach actuals
       const decoratedRows = budgetRows.map(r => ({...r, actual: actualsByCat[r.type + '|' + r.name] || 0}));
@@ -2973,8 +2993,8 @@
 
       // groups — budget depends on view
       const budgetForRow = (r) => {
-        if (view === 'month') return r.months[monthIdx] || 0;
-        if (view === 'year') return r.months.reduce((a,b)=>a+b, 0);
+        if (statsView === 'month') return r.months[monthIdx] || 0;
+        if (statsView === 'year') return r.months.reduce((a,b)=>a+b, 0);
         // all time: sum that category across every year
         const arr = allTimeBudgetByCat[r.type + '|' + r.name];
         return arr ? arr.reduce((a,b)=>a+b, 0) : 0;
@@ -3488,16 +3508,16 @@
           <div className="hero">
             <div className="card feature">
               <div>
-                <div className="stat-label">{view === 'month' ? 'Net this month' : view === 'year' ? 'Net '+year : 'Net · all time'}</div>
+                <div className="stat-label">{statsView === 'month' ? 'Net this month' : statsView === 'year' ? 'Net '+year : 'Net · all time'}</div>
                 <div className="stat-val serif">{fmt(totals.netA)}</div>
                 <div className="stat-sub">
-                  {view === 'month' && monthIdx > 0 && <span className={"pill " + (monthChange>=0?'up':'down')}>
+                  {statsView === 'month' && monthIdx > 0 && <span className={"pill " + (monthChange>=0?'up':'down')}>
                     {monthChange>=0?'▲':'▼'} {fmtSigned(monthChange)} vs {MONTHS[monthIdx-1]}
                   </span>}
-                  <span style={{marginLeft: view==='month' && monthIdx > 0 ? 8 : 0, color:'var(--ink-3)'}}>planned {fmt(totals.netB)}</span>
+                  <span style={{marginLeft: statsView==='month' && monthIdx > 0 ? 8 : 0, color:'var(--ink-3)'}}>planned {fmt(totals.netB)}</span>
                 </div>
               </div>
-              <Spark data={view==='month' ? history.net.slice(0, monthIdx+1) : view==='year' ? history.net : yearlyHistory.map(y=>y.net)} color="var(--sage)"/>
+              <Spark data={statsView==='month' ? history.net.slice(0, monthIdx+1) : statsView==='year' ? history.net : yearlyHistory.map(y=>y.net)} color="var(--sage)"/>
             </div>
 
             <div className="card">
@@ -3530,15 +3550,18 @@
             </div>
           </div>
 
-          {/* Allocation strip */}
-          <AllocationStrip totals={totals} view={view} year={year} monthName={MONTHS[monthIdx]}/>
-
-          {/* Tabs */}
-          <div className="tabs">
-            {[{k:'all',l:'All categories'},{k:'Income',l:'Income'},{k:'Expenses',l:'Expenses'},{k:'Savings',l:'Savings'}].map(t => (
-              <button key={t.k} className={"tab " + (tab===t.k?'active':'')} onClick={()=>setTab(t.k)}>{t.l}</button>
-            ))}
-          </div>
+          {/* Allocation strip + category tabs — these belong to the budget
+              table view, so we hide them on the Flow tab. */}
+          {view !== 'flow' && (
+            <>
+              <AllocationStrip totals={totals} view={statsView} year={year} monthName={MONTHS[monthIdx]}/>
+              <div className="tabs">
+                {[{k:'all',l:'All categories'},{k:'Income',l:'Income'},{k:'Expenses',l:'Expenses'},{k:'Savings',l:'Savings'}].map(t => (
+                  <button key={t.k} className={"tab " + (tab===t.k?'active':'')} onClick={()=>setTab(t.k)}>{t.l}</button>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Flow view (Sankey) renders separately from the standard grid */}
           {view === 'flow' ? (
@@ -3549,6 +3572,8 @@
               setMonthIdx={setMonthIdx}
               setYear={setYear}
               years={years}
+              period={flowPeriod}
+              setPeriod={setFlowPeriod}
               fmt={fmt}
             />
           ) : (
