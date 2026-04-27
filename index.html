@@ -446,6 +446,207 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ==========================================================
+     RESPONSIVE — Tablet (640-1024px) and Phone (<640px)
+     ==========================================================
+     Breakpoints chosen to match common device widths:
+       - Desktop: >1024px (current layout, untouched)
+       - Tablet:   641-1024px (iPad portrait, big phones landscape)
+       - Phone:   <=640px (most phone portrait orientations)
+     Mobile-only UI elements (bottom tab bar, FAB) are HIDDEN by
+     default and only shown via media queries. Desktop UI is hidden
+     on phone via the same approach. */
+
+  /* Default: hide mobile-only UI on all screens. Media queries
+     below override these for phone/tablet sizes. */
+  .mobile-tabbar, .fab, .mobile-only, .sankey-mobile-only, .cat-cards { display: none; }
+  .sankey-desktop-only { display: block; }
+
+  /* ===== Tablet ===== */
+  @media (max-width: 1024px) {
+    .app { padding: 18px 16px 60px; }
+    .topbar { gap: 12px; flex-wrap: wrap; }
+    .hero { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .hero .card.feature { grid-column: 1 / -1; }
+    .main-grid { grid-template-columns: 1fr; }
+    .tx-row { grid-template-columns: 80px 80px 1fr 100px auto; gap: 10px; padding: 10px 14px; font-size: 12px; }
+    .tx-row > :nth-child(4) { display: none; } /* hide details column on tablet */
+    .table-card { overflow-x: auto; }
+  }
+
+  /* ===== Phone ===== */
+  @media (max-width: 640px) {
+    body { font-size: 13px; }
+    .app { padding: 14px 12px 96px; max-width: 100%; }
+
+    /* --- Topbar: simplified, brand only + overflow menu --- */
+    .topbar {
+      flex-direction: row; align-items: center; gap: 8px;
+      padding-bottom: 10px; margin-bottom: 14px;
+      flex-wrap: nowrap;
+    }
+    .brand-mark { width: 40px; height: 40px; }
+    .brand h1 { font-size: 16px; }
+    .brand .sub { font-size: 11px; }
+    .desktop-only { display: none !important; }
+    .mobile-only { display: block; }
+    .mobile-only-flex { display: flex; }
+    .topbar .actions, .topbar .view-switch { display: none; }
+    .topbar .mobile-overflow { display: inline-flex; }
+
+    /* --- Greeting line --- */
+    .greeting-line { gap: 8px; margin-bottom: 12px; }
+    .greeting-line .greeting-text { font-size: 17px; }
+    .greeting-emoji { font-size: 18px; }
+
+    /* --- Hero: 1 wide + 3 narrow row --- */
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-areas: "feature feature feature" "inc spent rate";
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .hero .card.feature { grid-area: feature; }
+    .hero .card:nth-child(2) { grid-area: inc; }
+    .hero .card:nth-child(3) { grid-area: spent; }
+    .hero .card:nth-child(4) { grid-area: rate; }
+    .hero .card { padding: 12px 10px; min-height: 0; }
+    .hero .stat-label { font-size: 9px; }
+    .hero .stat-val.serif { font-size: 22px; }
+    .hero .stat-val.serif.small { font-size: 16px; }
+    .hero .stat-sub { font-size: 10px; margin-top: 4px; }
+    .hero .donut-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .hero .legend-row { font-size: 10px; }
+    .hero .spark { display: none; } /* spark too small to be useful at this size */
+
+    /* --- Allocation strip / category tabs --- */
+    .alloc-strip { font-size: 11px; padding: 5px 10px; flex-wrap: wrap; }
+    .tabs { gap: 4px; flex-wrap: wrap; }
+    .tabs .tab { font-size: 11px; padding: 6px 10px; }
+
+    /* --- Categories: card-per-row, no table --- */
+    .table-card { border-radius: 10px; }
+    .table-head { padding: 12px 14px; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .table-head h2 { font-size: 16px; }
+    .table-head > div { font-size: 10px; }
+    /* Hide standard table on phone, replaced by .cat-cards below */
+    .table-card table { display: none; }
+    .cat-cards { display: flex; flex-direction: column; }
+    .cat-card {
+      display: grid;
+      grid-template-columns: 32px 1fr auto;
+      gap: 10px; align-items: center;
+      padding: 12px 14px; border-bottom: 1px solid var(--line);
+    }
+    .cat-card:last-child { border-bottom: 0; }
+    .cat-card .glyph {
+      width: 32px; height: 32px; display: inline-flex; align-items: center;
+      justify-content: center; font-size: 18px;
+      border-radius: 8px;
+    }
+    .cat-card .glyph.with-bg { font-size: 12px; font-weight: 600; }
+    .cat-card .body { min-width: 0; }
+    .cat-card .name { font-weight: 500; font-size: 13px; line-height: 1.2; }
+    .cat-card .sub-row { display: flex; gap: 6px; align-items: baseline; margin-top: 2px; }
+    .cat-card .actual { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; color: var(--ink); }
+    .cat-card .budget { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-3); }
+    .cat-card .mini-bar {
+      width: 60px; height: 4px; background: var(--line); border-radius: 999px; overflow: hidden;
+      align-self: center;
+    }
+    .cat-card .mini-bar .fill { height: 100%; border-radius: 999px; transition: width 0.3s; }
+
+    /* --- Transactions: card per row --- */
+    .tx-list { max-height: none; }
+    .tx-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas: "main amt" "sub amt";
+      gap: 2px 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+    }
+    .tx-row > :nth-child(1) { grid-area: main; font-size: 10px; color: var(--ink-3); }
+    .tx-row > :nth-child(2) { display: none; } /* hide separate type column */
+    .tx-row > :nth-child(3) { grid-area: main; align-self: start; }
+    .tx-row > :nth-child(4) { grid-area: sub; font-size: 11px; color: var(--ink-3); }
+    .tx-row > :nth-child(5) { grid-area: amt; align-self: center; font-size: 14px; font-weight: 500; }
+    .tx-row > :nth-child(6) { display: none; } /* hide delete button — use long-press or modal */
+
+    /* --- Modals: full-width minus margin --- */
+    .modal { width: calc(100vw - 24px); max-width: none; padding: 18px 16px; }
+    .modal-row input, .modal-row select { padding: 12px 14px; font-size: 16px; /* prevents iOS zoom-on-focus */ }
+    .modal-actions { flex-direction: column-reverse; gap: 8px; }
+    .modal-actions .btn { width: 100%; padding: 12px; }
+
+    /* --- Tx form / filter (used in standalone tx form) --- */
+    .tx-form { grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+    .tx-form input, .tx-form select { font-size: 16px; padding: 10px; }
+    .tx-form .btn-primary { grid-column: 1 / -1; }
+
+    /* --- Bottom tab bar (mobile-only) --- */
+    .mobile-tabbar {
+      display: flex;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--bg-elev); border-top: 1px solid var(--line);
+      padding: 6px 4px env(safe-area-inset-bottom, 6px) 4px;
+      z-index: 50;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.04);
+    }
+    .mobile-tabbar button {
+      flex: 1;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 2px; padding: 6px 4px;
+      color: var(--ink-3); font-size: 10px; font-weight: 500;
+      border-radius: 8px;
+      transition: color 0.15s;
+    }
+    .mobile-tabbar button.on { color: var(--ink); font-weight: 600; }
+    .mobile-tabbar button .tab-icon { font-size: 18px; line-height: 1; }
+    .mobile-tabbar button.on .tab-icon { transform: scale(1.1); }
+
+    /* --- Floating action button (FAB) --- */
+    .fab {
+      display: flex;
+      position: fixed;
+      bottom: calc(56px + env(safe-area-inset-bottom, 6px) + 12px);
+      right: 16px;
+      width: 56px; height: 56px; border-radius: 999px;
+      background: var(--ink); color: var(--bg);
+      align-items: center; justify-content: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+      z-index: 49;
+      transition: transform 0.15s;
+    }
+    .fab:active { transform: scale(0.94); }
+    .fab svg { width: 24px; height: 24px; }
+
+    /* --- Sankey: simplified version on phone --- */
+    .sankey-mobile-only { display: block; }
+    .sankey-desktop-only { display: none; }
+
+    /* --- Net worth tweaks --- */
+    .nw-account-row { grid-template-columns: 1fr auto !important; }
+    .nw-account-row .balance-update-btn { font-size: 11px !important; padding: 4px 8px !important; }
+
+    /* --- Confetti — fewer pieces on phone for performance --- */
+    .confetti-piece:nth-child(n+30) { display: none; }
+
+    /* --- Greeting card / fact card padding --- */
+    .fact-card { padding: 12px 14px; gap: 10px; }
+    .fact-icon { font-size: 22px; }
+    .fact-title { font-size: 10px; }
+    .fact-text { font-size: 13px; }
+
+    /* --- Tweaks panel --- */
+    .tweaks-panel { width: calc(100vw - 24px); right: 12px; bottom: calc(70px + env(safe-area-inset-bottom, 6px)); }
+
+    /* --- Login overlay --- */
+    #auth-overlay .card { width: calc(100vw - 24px); padding: 24px 20px; }
+  }
+
 </style>
 </head>
 <body>
@@ -1345,6 +1546,138 @@
     // Compact time-of-day greeting line. Shown at the top of the main
     // page, above the hero stats. Uses an emoji that matches the time
     // of day (sun/moon/stars) to add a touch of warmth.
+    // Hook: returns true when the viewport is at "phone" size (<=640px).
+    // Updates on resize so the React UI re-renders if you rotate or
+    // resize the browser. Used to render mobile-specific components
+    // (bottom tab bar, FAB, simplified Sankey) and skip desktop UI.
+    function useIsMobile(breakpoint = 640) {
+      const { useState, useEffect } = React;
+      const [isMobile, setIsMobile] = useState(() =>
+        typeof window !== 'undefined' && window.innerWidth <= breakpoint
+      );
+      useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, [breakpoint]);
+      return isMobile;
+    }
+    window.useIsMobile = useIsMobile;
+
+    // MobileTabBar — fixed bottom navigation for phones. Replaces the
+    // desktop topbar's view switcher with iOS-style icon tabs. Always
+    // visible on phone (<=640px), hidden on desktop via CSS.
+    var MobileTabBar = function({ view, setView }) {
+      const tabs = [
+        { key: 'month',    icon: '📅', label: 'Month' },
+        { key: 'year',     icon: '📆', label: 'Year' },
+        { key: 'all',      icon: '∞',  label: 'All time' },
+        { key: 'flow',     icon: '💧', label: 'Flow' },
+        { key: 'networth', icon: '💎', label: 'Net Worth' }
+      ];
+      return (
+        <nav className="mobile-tabbar" aria-label="Main navigation">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              className={view === t.key ? 'on' : ''}
+              onClick={() => setView(t.key)}
+              aria-label={t.label}
+              aria-current={view === t.key ? 'page' : undefined}
+            >
+              <span className="tab-icon" aria-hidden="true">{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </nav>
+      );
+    }
+    window.MobileTabBar = MobileTabBar;
+
+    // MobileSankey — simplified flow visualization for phones.
+    // Just shows total Income → 3 buckets (Expenses/Savings/Leftover)
+    // as horizontal stacked bars. No individual categories — those
+    // are too cramped to read on a 380px-wide screen.
+    var MobileSankey = function({ income, expenses, savings, leftover }) {
+      const totalIn = income.reduce((a,b)=>a+b.amount, 0);
+      const totalExp = expenses.reduce((a,b)=>a+b.amount, 0);
+      const totalSav = savings.reduce((a,b)=>a+b.amount, 0);
+      const lo = Math.max(0, leftover);
+      const middleTotal = Math.max(1, totalExp + totalSav + lo);
+
+      if (totalIn <= 0) {
+        return (
+          <div style={{padding: '40px 16px', textAlign: 'center', color: 'var(--ink-3)'}}>
+            <div style={{fontFamily: "'Fraunces', serif", fontSize: 16, fontStyle: 'italic'}}>
+              No income recorded for this period.
+            </div>
+          </div>
+        );
+      }
+
+      const buckets = [
+        { name: 'Expenses', amount: totalExp, color: 'var(--terracotta)', glyph: '💸' },
+        { name: 'Savings',  amount: totalSav, color: 'var(--blue)',       glyph: '🏦' },
+        { name: 'Leftover', amount: lo,       color: 'var(--amber)',      glyph: '✨' }
+      ].filter(b => b.amount > 0);
+
+      return (
+        <div style={{padding: '8px 0'}}>
+          {/* Income bar (full width) */}
+          <div style={{marginBottom: 24}}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              marginBottom: 6
+            }}>
+              <span style={{fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 14, color: 'var(--ink)'}}>
+                💵 Income
+              </span>
+              <span className="num" style={{fontSize: 14, fontWeight: 600, color: 'var(--ink)'}}>
+                {fmt(totalIn)}
+              </span>
+            </div>
+            <div style={{
+              height: 28, background: 'var(--sage)', borderRadius: 6,
+              opacity: 0.85
+            }}/>
+          </div>
+
+          {/* Down-arrow connector */}
+          <div style={{textAlign: 'center', color: 'var(--ink-3)', marginBottom: 16, fontSize: 18}}>
+            ↓
+          </div>
+
+          {/* Buckets stacked */}
+          <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+            {buckets.map((b, i) => (
+              <div key={i}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                  marginBottom: 4
+                }}>
+                  <span style={{fontFamily: "'Fraunces', serif", fontWeight: 500, fontSize: 13, color: 'var(--ink)'}}>
+                    {b.glyph} {b.name}
+                  </span>
+                  <span className="num" style={{fontSize: 13, color: 'var(--ink-2)'}}>
+                    {fmt(b.amount)} <span style={{color: 'var(--ink-3)', fontSize: 11}}>· {((b.amount/totalIn)*100).toFixed(0)}%</span>
+                  </span>
+                </div>
+                <div style={{
+                  height: 22,
+                  background: b.color,
+                  width: ((b.amount / totalIn) * 100) + '%',
+                  borderRadius: 6,
+                  opacity: 0.85,
+                  transition: 'width 0.3s'
+                }}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    window.MobileSankey = MobileSankey;
+
     var GreetingLine = function() {
       const { useState, useEffect } = React;
       // Re-render every minute so the greeting shifts with the day
@@ -2131,13 +2464,25 @@
             )}
           </div>
 
-          <Sankey
-            income={income}
-            expenses={expenses}
-            savings={savings}
-            leftover={leftover}
-            periodLabel={periodLabel}
-          />
+          {/* Sankey: simplified version on phone, full version on
+              tablet/desktop. CSS hides whichever is unused. */}
+          <div className="sankey-desktop-only">
+            <Sankey
+              income={income}
+              expenses={expenses}
+              savings={savings}
+              leftover={leftover}
+              periodLabel={periodLabel}
+            />
+          </div>
+          <div className="sankey-mobile-only">
+            <MobileSankey
+              income={income}
+              expenses={expenses}
+              savings={savings}
+              leftover={leftover}
+            />
+          </div>
 
           <div style={{
             marginTop: 16, padding: '12px 16px',
@@ -2546,7 +2891,7 @@
     }
     window.NetWorthView = NetWorthView;
 
-    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, BalanceUpdateModal, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, BalanceUpdateModal, MobileTabBar, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
   
 })();
 </script>
@@ -3042,7 +3387,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
+    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, MobileTabBar, MobileSankey, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -4219,6 +4564,58 @@
                     ))}
                   </tbody>
                 </table>
+
+                {/* Mobile category cards — rendered alongside the table.
+                    CSS shows one or the other based on viewport. Mobile
+                    version is intentionally simpler: just visible
+                    categories with budget/actual numbers and a mini
+                    progress bar. Editing budgets requires desktop or
+                    tablet — a deliberate choice to keep the mobile UI
+                    focused on logging transactions, not editing budgets. */}
+                <div className="cat-cards">
+                  {visible.map(g => (
+                    <React.Fragment key={'mc-' + g.key}>
+                      <div style={{
+                        padding: '10px 14px', background: 'var(--bg-soft)',
+                        fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em',
+                        color: 'var(--ink-3)', fontWeight: 600,
+                        display: 'flex', justifyContent: 'space-between'
+                      }}>
+                        <span>{g.label}</span>
+                        <span className="num" style={{color: 'var(--ink-2)'}}>
+                          {fmt(g.actual)} / {fmt(g.budget)}
+                        </span>
+                      </div>
+                      {g.rows.map(r => {
+                        const acc = ACCENTS[r.color];
+                        const rowBudget = budgetForRow(r);
+                        const pct = rowBudget > 0 ? Math.min(100, (r.actual / rowBudget) * 100) : 0;
+                        const isEmoji = isEmojiGlyph(r.glyph);
+                        return (
+                          <div key={'mc-' + r.key} className="cat-card">
+                            <span
+                              className={'glyph' + (isEmoji ? '' : ' with-bg')}
+                              style={isEmoji ? undefined : {background: acc.bg, color: acc.fg}}
+                            >{r.glyph}</span>
+                            <div className="body">
+                              <div className="name">{r.name}</div>
+                              <div className="sub-row">
+                                <span className="actual">{fmt(r.actual || 0)}</span>
+                                <span className="budget">/ {fmt(rowBudget)}</span>
+                              </div>
+                            </div>
+                            <div className="mini-bar" aria-hidden="true">
+                              <div className="fill" style={{
+                                width: pct + '%',
+                                background: pct > 100 ? 'var(--terracotta)' : acc.bg
+                              }}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
               </div>
 
               {/* Transactions */}
@@ -4417,6 +4814,25 @@
               </div>
             </div>
           </div>
+
+          {/* Mobile bottom tab bar — view switcher for phones. CSS hides
+              on desktop. Renders alongside the desktop topbar so the
+              same view state drives both. */}
+          <MobileTabBar view={view} setView={setView} />
+
+          {/* Floating action button — quick access to Add Transaction
+              on mobile. CSS hides on desktop. Lives above the tab bar. */}
+          <button
+            className="fab"
+            onClick={() => setModalOpen(true)}
+            aria-label="Add transaction"
+            title="Add transaction"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
         </div>
       );
     }
