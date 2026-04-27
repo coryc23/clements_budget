@@ -478,7 +478,7 @@
   /* ===== Phone ===== */
   @media (max-width: 640px) {
     body { font-size: 13px; }
-    .app { padding: 14px 12px 96px; max-width: 100%; }
+    .app { padding: 14px 12px calc(110px + env(safe-area-inset-bottom, 8px)) 12px; max-width: 100%; }
 
     /* --- Topbar: simplified, brand only + overflow menu --- */
     .topbar {
@@ -558,60 +558,139 @@
     }
     .cat-card .mini-bar .fill { height: 100%; border-radius: 999px; transition: width 0.3s; }
 
-    /* --- Transactions: card per row --- */
+    /* --- Transactions: 2-line card per row.
+       Desktop has 6 children: (1) date (2) type (3) category (4) details
+       (5) amount (6) delete. On mobile we restructure into a 2x2 grid:
+         row 1: category    | amount
+         row 2: date·details| -
+       Hide type and delete entirely. */
     .tx-list { max-height: none; }
     .tx-row {
       display: grid;
       grid-template-columns: 1fr auto;
-      grid-template-areas: "main amt" "sub amt";
+      grid-template-rows: auto auto;
+      grid-template-areas:
+        "cat amt"
+        "meta amt";
       gap: 2px 10px;
       padding: 10px 14px;
-      font-size: 12px;
+      font-size: 13px;
     }
-    .tx-row > :nth-child(1) { grid-area: main; font-size: 10px; color: var(--ink-3); }
-    .tx-row > :nth-child(2) { display: none; } /* hide separate type column */
-    .tx-row > :nth-child(3) { grid-area: main; align-self: start; }
-    .tx-row > :nth-child(4) { grid-area: sub; font-size: 11px; color: var(--ink-3); }
-    .tx-row > :nth-child(5) { grid-area: amt; align-self: center; font-size: 14px; font-weight: 500; }
-    .tx-row > :nth-child(6) { display: none; } /* hide delete button — use long-press or modal */
+    /* Date: small, dim, top-left as part of meta row */
+    .tx-row > :nth-child(1) {
+      grid-area: meta;
+      font-size: 11px;
+      color: var(--ink-3);
+      align-self: start;
+    }
+    /* Type: hidden on phone */
+    .tx-row > :nth-child(2) { display: none; }
+    /* Category (with emoji): main label, top-left */
+    .tx-row > :nth-child(3) {
+      grid-area: cat;
+      font-size: 14px;
+      align-self: end;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .tx-row > :nth-child(3) span { overflow: hidden; text-overflow: ellipsis; }
+    /* Details: appended to date in meta row */
+    .tx-row > :nth-child(4) {
+      grid-area: meta;
+      font-size: 11px;
+      color: var(--ink-3);
+      justify-self: end;
+      align-self: start;
+      max-width: 60%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Amount: right side, vertically centered, larger */
+    .tx-row > :nth-child(5) {
+      grid-area: amt;
+      align-self: center;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    /* Delete: hidden on phone — long-press or tap-to-edit handles it */
+    .tx-row > :nth-child(6) { display: none; }
 
-    /* --- Modals: full-width minus margin --- */
-    .modal { width: calc(100vw - 24px); max-width: none; padding: 18px 16px; }
-    .modal-row input, .modal-row select { padding: 12px 14px; font-size: 16px; /* prevents iOS zoom-on-focus */ }
-    .modal-actions { flex-direction: column-reverse; gap: 8px; }
-    .modal-actions .btn { width: 100%; padding: 12px; }
+    /* --- Modals: top-anchored, scrollable, compact spacing.
+       The default centered modal gets crushed by the iOS keyboard
+       when an input is focused. Anchoring to the top with a max-height
+       lets the content scroll naturally with the keyboard up. */
+    .modal-back {
+      align-items: flex-start;
+      padding: 12px;
+      overflow-y: auto;
+    }
+    .modal {
+      width: 100%;
+      max-width: 100%;
+      padding: 16px 14px;
+      margin-top: 8px;
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+    }
+    .modal h3 { font-size: 18px; margin-bottom: 12px; }
+    .modal-row { margin-bottom: 8px; gap: 4px; }
+    .modal-row label { font-size: 10px; }
+    .modal-row input, .modal-row select {
+      padding: 10px 12px;
+      font-size: 16px; /* prevents iOS zoom-on-focus */
+    }
+    .modal-row-2 { gap: 8px; margin-bottom: 8px; }
+    .modal-actions {
+      flex-direction: column-reverse;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .modal-actions .btn {
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+    }
 
     /* --- Tx form / filter (used in standalone tx form) --- */
     .tx-form { grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
     .tx-form input, .tx-form select { font-size: 16px; padding: 10px; }
     .tx-form .btn-primary { grid-column: 1 / -1; }
 
-    /* --- Bottom tab bar (mobile-only) --- */
+    /* --- Bottom tab bar (mobile-only) ---
+       Extra bottom padding (16px) above the safe-area inset to clear
+       the iOS home indicator. The home indicator is ~5px tall but
+       takes a tap-buffer above it, so we add extra cushion. */
     .mobile-tabbar {
       display: flex;
       position: fixed; bottom: 0; left: 0; right: 0;
       background: var(--bg-elev); border-top: 1px solid var(--line);
-      padding: 6px 4px env(safe-area-inset-bottom, 6px) 4px;
+      padding: 6px 2px calc(env(safe-area-inset-bottom, 8px) + 8px) 2px;
       z-index: 50;
       box-shadow: 0 -2px 12px rgba(0,0,0,0.04);
     }
     .mobile-tabbar button {
       flex: 1;
       display: flex; flex-direction: column; align-items: center;
-      gap: 2px; padding: 6px 4px;
+      gap: 3px; padding: 6px 2px;
       color: var(--ink-3); font-size: 10px; font-weight: 500;
       border-radius: 8px;
       transition: color 0.15s;
+      min-width: 0;
     }
     .mobile-tabbar button.on { color: var(--ink); font-weight: 600; }
-    .mobile-tabbar button .tab-icon { font-size: 18px; line-height: 1; }
-    .mobile-tabbar button.on .tab-icon { transform: scale(1.1); }
+    .mobile-tabbar button .tab-icon {
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1; height: 22px;
+    }
+    .mobile-tabbar button.on .tab-icon { transform: scale(1.05); }
 
-    /* --- Floating action button (FAB) --- */
+    /* --- Floating action button (FAB) ---
+       Positioned to clear the bottom tab bar plus extra cushion. */
     .fab {
       display: flex;
       position: fixed;
-      bottom: calc(56px + env(safe-area-inset-bottom, 6px) + 12px);
+      bottom: calc(72px + env(safe-area-inset-bottom, 8px) + 8px);
       right: 16px;
       width: 56px; height: 56px; border-radius: 999px;
       background: var(--ink); color: var(--bg);
@@ -1567,13 +1646,67 @@
     // MobileTabBar — fixed bottom navigation for phones. Replaces the
     // desktop topbar's view switcher with iOS-style icon tabs. Always
     // visible on phone (<=640px), hidden on desktop via CSS.
-    var MobileTabBar = function({ view, setView }) {
+    var MobileTabBar = function({ view, setView, currentYear }) {
+      // Use SVG icons instead of emojis. iOS renders emojis at slightly
+      // different sizes (📅 vs 📆 are notably different), and emojis
+      // also aren't theme-aware. SVGs match the design system.
+      const yearText = String(currentYear || new Date().getFullYear()).slice(-2);
+      const stroke = "currentColor";
       const tabs = [
-        { key: 'month',    icon: '📅', label: 'Month' },
-        { key: 'year',     icon: '📆', label: 'Year' },
-        { key: 'all',      icon: '∞',  label: 'All time' },
-        { key: 'flow',     icon: '💧', label: 'Flow' },
-        { key: 'networth', icon: '💎', label: 'Net Worth' }
+        {
+          key: 'month',
+          label: 'Month',
+          icon: (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="16" rx="2"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <line x1="8" y1="3" x2="8" y2="7"/>
+              <line x1="16" y1="3" x2="16" y2="7"/>
+            </svg>
+          )
+        },
+        {
+          key: 'year',
+          label: 'Year',
+          icon: (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="16" rx="2"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <text x="12" y="18" textAnchor="middle" fontSize="7" fontFamily="JetBrains Mono, monospace" fontWeight="600" fill={stroke} stroke="none">'{yearText}</text>
+            </svg>
+          )
+        },
+        {
+          key: 'all',
+          label: 'All',
+          icon: (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 6c-3 0-3 12-6 12s-3-12-6-12c-2 0-2 12 0 12s2-12 0-12z" transform="translate(2 0)"/>
+              <path d="M8 6c3 0 3 12 6 12s3-12 6-12c2 0 2 12 0 12s-2-12 0-12z" transform="translate(-2 0)"/>
+            </svg>
+          )
+        },
+        {
+          key: 'flow',
+          label: 'Flow',
+          icon: (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3 C 8 9, 6 12, 6 16 a 6 6 0 0 0 12 0 c 0 -4 -2 -7 -6 -13z"/>
+            </svg>
+          )
+        },
+        {
+          key: 'networth',
+          label: 'Worth',
+          icon: (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12,3 19,9 12,21 5,9"/>
+              <line x1="5" y1="9" x2="19" y2="9"/>
+              <line x1="9" y1="9" x2="12" y2="21"/>
+              <line x1="15" y1="9" x2="12" y2="21"/>
+            </svg>
+          )
+        }
       ];
       return (
         <nav className="mobile-tabbar" aria-label="Main navigation">
@@ -1593,6 +1726,57 @@
       );
     }
     window.MobileTabBar = MobileTabBar;
+
+    // MobilePeriodPicker — inline month/year picker shown at the top of
+    // the Month and Year views on mobile, since the desktop topbar
+    // selects are hidden. Always visible (no taps to reveal). Tapping
+    // the chip cycles to a select. On Year view, only the year picker
+    // shows.
+    var MobilePeriodPicker = function({ view, monthIdx, year, setMonthIdx, setYear, years }) {
+      const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const showMonth = view === 'month';
+      const showYear = view === 'month' || view === 'year';
+      if (!showMonth && !showYear) return null;
+      return (
+        <div style={{
+          display: 'flex', gap: 8, marginBottom: 12,
+          alignItems: 'center'
+        }}>
+          {showMonth && (
+            <select
+              value={monthIdx}
+              onChange={e => setMonthIdx(parseInt(e.target.value))}
+              style={{
+                flex: 1, padding: '10px 12px',
+                background: 'var(--bg-elev)', border: '1px solid var(--line)',
+                borderRadius: 10, color: 'var(--ink)',
+                fontSize: 14, fontWeight: 500,
+                font: 'inherit'
+              }}
+            >
+              {MONTHS_LONG.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+          )}
+          {showYear && (
+            <select
+              value={year}
+              onChange={e => setYear(parseInt(e.target.value))}
+              style={{
+                flex: showMonth ? '0 0 100px' : 1,
+                padding: '10px 12px',
+                background: 'var(--bg-elev)', border: '1px solid var(--line)',
+                borderRadius: 10, color: 'var(--ink)',
+                fontSize: 14, fontWeight: 500,
+                font: 'inherit'
+              }}
+            >
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
+        </div>
+      );
+    }
+    window.MobilePeriodPicker = MobilePeriodPicker;
 
     // MobileSankey — simplified flow visualization for phones.
     // Just shows total Income → 3 buckets (Expenses/Savings/Leftover)
@@ -2891,7 +3075,7 @@
     }
     window.NetWorthView = NetWorthView;
 
-    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, BalanceUpdateModal, MobileTabBar, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, BalanceUpdateModal, MobileTabBar, MobilePeriodPicker, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
   
 })();
 </script>
@@ -3387,7 +3571,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, MobileTabBar, MobileSankey, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
+    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, MobileTabBar, MobilePeriodPicker, MobileSankey, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -4398,6 +4582,20 @@
           {/* Personalized greeting line with time-of-day emoji */}
           <GreetingLine />
 
+          {/* Mobile-only month/year picker. Hidden on desktop via CSS
+              since the topbar has its own pickers. Only renders content
+              for views where it makes sense (Month and Year). */}
+          <div className="mobile-only">
+            <MobilePeriodPicker
+              view={view}
+              monthIdx={monthIdx}
+              year={year}
+              setMonthIdx={setMonthIdx}
+              setYear={setYear}
+              years={years}
+            />
+          </div>
+
           {/* Hero — cash flow stats. Hidden in networth view since
               that page is about balance, not flow. */}
           {view !== 'networth' && (
@@ -4818,7 +5016,7 @@
           {/* Mobile bottom tab bar — view switcher for phones. CSS hides
               on desktop. Renders alongside the desktop topbar so the
               same view state drives both. */}
-          <MobileTabBar view={view} setView={setView} />
+          <MobileTabBar view={view} setView={setView} currentYear={year} />
 
           {/* Floating action button — quick access to Add Transaction
               on mobile. CSS hides on desktop. Lives above the tab bar. */}
