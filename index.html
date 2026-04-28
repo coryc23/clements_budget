@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>The Clements Fam Budget</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -91,7 +91,13 @@
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    /* Prevent any horizontal scroll regardless of element widths.
+       Combined with viewport meta's user-scalable=no, this ensures
+       the page always fits to the screen width. */
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
   }
+  html { overflow-x: hidden; }
   .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   .serif { font-family: 'Fraunces', serif; font-optical-sizing: auto; letter-spacing: -0.01em; }
 
@@ -619,18 +625,19 @@
     /* --- Modals: top-anchored, scrollable, compact spacing.
        The default centered modal gets crushed by the iOS keyboard
        when an input is focused. Anchoring to the top with a max-height
-       lets the content scroll naturally with the keyboard up. */
+       lets the content scroll naturally with the keyboard up.
+       Top padding accounts for iOS status bar (notch). */
     .modal-back {
       align-items: flex-start;
-      padding: 12px;
+      padding: calc(env(safe-area-inset-top, 12px) + 12px) 12px 12px 12px;
       overflow-y: auto;
     }
     .modal {
       width: 100%;
       max-width: 100%;
       padding: 16px 14px;
-      margin-top: 8px;
-      max-height: calc(100vh - 24px);
+      margin-top: 0;
+      max-height: calc(100vh - env(safe-area-inset-top, 12px) - 24px);
       overflow-y: auto;
     }
     .modal h3 { font-size: 18px; margin-bottom: 12px; }
@@ -638,24 +645,37 @@
     .modal-row label { font-size: 10px; }
     .modal-row input, .modal-row select {
       padding: 10px 12px;
-      font-size: 16px; /* prevents iOS zoom-on-focus */
+      font-size: 15px;
     }
     .modal-row-2 { gap: 8px; margin-bottom: 8px; }
+    /* Action buttons stay side-by-side on mobile (not stacked) so the
+       modal stays compact. Cancel on the left, primary on the right —
+       matches iOS conventions. */
     .modal-actions {
-      flex-direction: column-reverse;
+      flex-direction: row;
       gap: 8px;
-      margin-top: 12px;
+      margin-top: 14px;
     }
     .modal-actions .btn {
-      width: 100%;
-      padding: 12px;
-      font-size: 15px;
+      flex: 1;
+      padding: 11px 12px;
+      font-size: 14px;
+    }
+    .modal-actions .btn-primary {
+      flex: 2;  /* primary action gets twice the width — easier to find */
     }
 
     /* --- Tx form / filter (used in standalone tx form) --- */
     .tx-form { grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
-    .tx-form input, .tx-form select { font-size: 16px; padding: 10px; }
+    .tx-form input, .tx-form select { font-size: 15px; padding: 10px; }
     .tx-form .btn-primary { grid-column: 1 / -1; }
+
+    /* Tx filter (search + type + month dropdowns): stack on phone so
+       each control gets a full-width line. Side-by-side cramming on
+       a 380px screen leaves the search box too narrow to read. */
+    .tx-filter { flex-wrap: wrap; gap: 6px; padding: 10px; }
+    .tx-filter input { flex: 1 1 100%; min-width: 0; padding: 9px 11px; font-size: 14px; }
+    .tx-filter select { flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; }
 
     /* --- Bottom tab bar (mobile-only) ---
        Extra bottom padding (16px) above the safe-area inset to clear
