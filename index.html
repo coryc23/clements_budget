@@ -446,6 +446,29 @@
   body.theme-dark .card.feature { background: linear-gradient(135deg, #26241f 0%, var(--bg-elev) 100%); }
   body.theme-dark tbody tr:hover td, body.theme-dark .tx-row:hover { background: #2a2722; }
   body.theme-dark .subtotal-row td { background: #2a2722; }
+  /* Dark theme color tuning. The sage and terra "ink" colors were
+     tuned for LIGHT backgrounds (L=0.38, dark green/orange). Against
+     a near-black background those become muddy and hard to read. We
+     override them with brighter, more saturated values so positive
+     (green) and negative (red/orange) numbers stand out clearly.
+     The "soft" backgrounds also need to be darker on this theme so
+     they don't blow out as bright pills against a dark canvas. */
+  body.theme-dark {
+    --sage-ink:   oklch(0.78 0.13 150);   /* brighter green text */
+    --terra-ink:  oklch(0.74 0.16 40);    /* brighter red/orange text */
+    --sage-soft:  oklch(0.30 0.06 150);   /* dark green pill background */
+    --terra-soft: oklch(0.28 0.07 40);    /* dark red pill background */
+    --sage:       oklch(0.78 0.13 150);   /* match brighter ink for bars */
+    --terracotta: oklch(0.74 0.16 40);
+  }
+  /* Make the fast-bar category pill explicitly use light-on-dark
+     contrast in dark theme. The default rule only sets background;
+     text inherited from parent (cream on cream) was unreadable. */
+  body.theme-dark .fast-bar-preview .pill.cat {
+    background: var(--sage-soft);
+    color: var(--sage-ink);
+    border-color: transparent;
+  }
   body.theme-cool { --bg:#f4f7fa; --bg-elev:#ffffff; --bg-soft:#e9eef4; --ink:#1a2330; --ink-2:#43536a; --ink-3:#7b879a; --line:#dde4ed; --line-strong:#c9d3e0; }
   body.theme-sage { --bg:#f4f6f2; --bg-elev:#ffffff; --bg-soft:#e8ece2; --ink:#1d251c; --ink-2:#485344; --ink-3:#818c7d; --line:#dee3d8; --line-strong:#c6ccbe; }
 
