@@ -551,12 +551,18 @@
         });
       if (upErr) throw upErr;
 
-      const { error: updErr } = await supabase
+      const { error: updErr, count: updCount } = await supabase
         .from('month_closeouts')
-        .update({ photo_path: path })
+        .update({ photo_path: path }, { count: 'exact' })
         .eq('year', year)
         .eq('month', month);
       if (updErr) throw updErr;
+      if (updCount === 0) {
+        // No rows updated — likely an RLS policy issue or the closeout
+        // doesn't exist. Throw so the React side surfaces an error
+        // instead of silently appearing to succeed.
+        throw new Error('Could not save photo: no closeout row was updated. Check RLS policies on month_closeouts.');
+      }
 
       // Best-effort cleanup of the old file. If it fails (e.g. file
       // already gone), log but don't break the upload — the new file
@@ -591,12 +597,15 @@
           .remove([path]);
         if (delErr) console.warn('Storage delete failed (continuing):', delErr);
       }
-      const { error: updErr } = await supabase
+      const { error: updErr, count: updCount } = await supabase
         .from('month_closeouts')
-        .update({ photo_path: null })
+        .update({ photo_path: null }, { count: 'exact' })
         .eq('year', year)
         .eq('month', month);
       if (updErr) throw updErr;
+      if (updCount === 0) {
+        throw new Error('Could not remove photo: no closeout row was updated. Check RLS policies on month_closeouts.');
+      }
       bumpLastEdited();
     },
 
