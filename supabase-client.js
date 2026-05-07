@@ -506,7 +506,7 @@
     async listCloseouts() {
       const { data, error } = await supabase
         .from('month_closeouts')
-        .select('year, month, closed_at, closed_by')
+        .select('year, month, closed_at, closed_by, photo_path')
         .order('year', { ascending: false })
         .order('month', { ascending: false });
       if (error) {
@@ -514,6 +514,59 @@
         return [];
       }
       return data || [];
+    },
+
+    // ---- Closeout photos (year-in-review) ----
+
+    // Upload a photo for a month closeout. The blob should be a
+    // pre-compressed JPEG (the React side handles resizing). Returns
+    // the storage path so the caller can save it on the closeout row.
+    async uploadCloseoutPhoto({ year, month, blob }) {
+      const path = year + '-' + String(month).padStart(2, '0') + '.jpg';
+      const { error: upErr } = await supabase.storage
+        .from('closeout-photos')
+        .upload(path, blob, {
+          contentType: 'image/jpeg',
+          upsert: true,
+          cacheControl: '3600'
+        });
+      if (upErr) throw upErr;
+      const { error: updErr } = await supabase
+        .from('month_closeouts')
+        .update({ photo_path: path })
+        .eq('year', year)
+        .eq('month', month);
+      if (updErr) throw updErr;
+      bumpLastEdited();
+      return path;
+    },
+
+    // Get a public URL for a closeout photo. Returns null if there's
+    // no path. URLs are cacheable so the gallery loads fast.
+    getCloseoutPhotoUrl(path) {
+      if (!path) return null;
+      const { data } = supabase.storage
+        .from('closeout-photos')
+        .getPublicUrl(path);
+      return data?.publicUrl || null;
+    },
+
+    // Remove a photo. Deletes from storage AND clears the path on
+    // the closeout row.
+    async deleteCloseoutPhoto({ year, month, path }) {
+      if (path) {
+        const { error: delErr } = await supabase.storage
+          .from('closeout-photos')
+          .remove([path]);
+        if (delErr) console.warn('Storage delete failed (continuing):', delErr);
+      }
+      const { error: updErr } = await supabase
+        .from('month_closeouts')
+        .update({ photo_path: null })
+        .eq('year', year)
+        .eq('month', month);
+      if (updErr) throw updErr;
+      bumpLastEdited();
     },
 
     // ---- Accounts (net worth tracking) ----

@@ -743,17 +743,19 @@
     .mobile-tabbar button {
       flex: 1;
       display: flex; flex-direction: column; align-items: center;
-      gap: 3px; padding: 6px 2px;
-      color: var(--ink-3); font-size: 10px; font-weight: 500;
+      gap: 3px; padding: 6px 1px;
+      color: var(--ink-3); font-size: 9.5px; font-weight: 500;
       border-radius: 8px;
       transition: color 0.15s;
       min-width: 0;
+      letter-spacing: -0.01em;
     }
     .mobile-tabbar button.on { color: var(--ink); font-weight: 600; }
     .mobile-tabbar button .tab-icon {
       display: flex; align-items: center; justify-content: center;
-      line-height: 1; height: 22px;
+      line-height: 1; height: 20px;
     }
+    .mobile-tabbar button .tab-icon svg { width: 20px; height: 20px; }
     .mobile-tabbar button.on .tab-icon { transform: scale(1.05); }
 
     /* --- Floating action button (FAB) ---
@@ -1775,6 +1777,18 @@
               <line x1="5" y1="9" x2="19" y2="9"/>
               <line x1="9" y1="9" x2="12" y2="21"/>
               <line x1="15" y1="9" x2="12" y2="21"/>
+            </svg>
+          )
+        },
+        {
+          key: 'review',
+          label: 'Recap',
+          icon: (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
             </svg>
           )
         }
@@ -3479,7 +3493,218 @@
     }
     window.NetWorthView = NetWorthView;
 
-    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, NetWorthChart, BalanceUpdateModal, MobileTabBar, MobilePeriodPicker, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
+    // YearInReviewView — 12-month grid showing one card per closed-out
+    // month. Each card has the month's photo (if uploaded), savings
+    // rate, biggest category, total spent. Clicking a card re-opens
+    // that month's celebration modal.
+    var YearInReviewView = function({ closeouts, txs, year, setYear, years, onOpenCloseout }) {
+      const { useMemo } = React;
+      const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+      // For each month, compute summary stats from txs (or null if not closed)
+      const months = useMemo(() => {
+        return MONTHS.map((label, mIdx) => {
+          const closeout = closeouts.find(c => c.year === year && c.month === mIdx + 1);
+          if (!closeout) return { mIdx, label, closeout: null };
+          // Sum txs for this month
+          const prefix = year + '-' + String(mIdx + 1).padStart(2, '0');
+          const monthTxs = txs.filter(t => t.date.startsWith(prefix));
+          let income = 0, expenses = 0;
+          const catTotals = {};
+          for (const t of monthTxs) {
+            if (t.type === 'Income') income += parseFloat(t.amount) || 0;
+            else if (t.type === 'Expenses') {
+              const amt = parseFloat(t.amount) || 0;
+              expenses += amt;
+              catTotals[t.category] = (catTotals[t.category] || 0) + amt;
+            }
+          }
+          const savingsRate = income > 0 ? (income - expenses) / income : 0;
+          // Biggest expense category
+          let biggestCat = null, biggestAmt = 0;
+          for (const [cat, amt] of Object.entries(catTotals)) {
+            if (amt > biggestAmt) { biggestAmt = amt; biggestCat = cat; }
+          }
+          // Photo URL
+          const photoUrl = closeout.photo_path && window.__SupaStore?.getCloseoutPhotoUrl
+            ? window.__SupaStore.getCloseoutPhotoUrl(closeout.photo_path)
+            : null;
+          return {
+            mIdx, label, closeout, income, expenses, savingsRate,
+            biggestCat, biggestAmt, txCount: monthTxs.length, photoUrl
+          };
+        });
+      }, [closeouts, txs, year]);
+
+      const closedCount = months.filter(m => m.closeout).length;
+
+      return (
+        <div className="card" style={{padding: '24px 26px'}}>
+          {/* Header */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12
+          }}>
+            <div>
+              <div style={{
+                fontSize: 11, textTransform: 'uppercase',
+                letterSpacing: '0.08em', color: 'var(--ink-3)',
+                fontWeight: 600, marginBottom: 6
+              }}>
+                Year in review
+              </div>
+              <div style={{
+                fontSize: 32, fontFamily: "'Fraunces', serif",
+                fontWeight: 500, color: 'var(--ink)', lineHeight: 1
+              }}>
+                {year}
+              </div>
+              <div style={{
+                fontSize: 13, color: 'var(--ink-3)', marginTop: 8,
+                fontFamily: "'Fraunces', serif", fontStyle: 'italic'
+              }}>
+                {closedCount === 0
+                  ? 'No months closed out for this year yet.'
+                  : `${closedCount} of 12 months closed out.`}
+              </div>
+            </div>
+            <select
+              value={year}
+              onChange={e => setYear(parseInt(e.target.value))}
+              style={{
+                padding: '8px 12px', background: 'var(--bg-elev)',
+                border: '1px solid var(--line)', borderRadius: 8,
+                color: 'var(--ink)', fontSize: 14, fontWeight: 500,
+                font: 'inherit'
+              }}
+            >
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+
+          {/* 12-month grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 14
+          }}>
+            {months.map(m => (
+              <div
+                key={m.mIdx}
+                onClick={() => m.closeout && onOpenCloseout(m.closeout, year, m.mIdx)}
+                style={{
+                  border: '1px solid var(--line)', borderRadius: 14,
+                  background: 'var(--bg-elev)', overflow: 'hidden',
+                  cursor: m.closeout ? 'pointer' : 'default',
+                  opacity: m.closeout ? 1 : 0.45,
+                  transition: 'transform 0.15s, box-shadow 0.15s',
+                  display: 'flex', flexDirection: 'column'
+                }}
+                onMouseEnter={e => {
+                  if (m.closeout) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                {/* Photo or placeholder */}
+                <div style={{
+                  aspectRatio: '4 / 3',
+                  background: m.photoUrl
+                    ? `url(${m.photoUrl}) center/cover no-repeat`
+                    : 'var(--bg-soft)',
+                  position: 'relative',
+                  borderBottom: '1px solid var(--line)'
+                }}>
+                  {!m.photoUrl && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--ink-3)', fontSize: 12,
+                      fontFamily: "'Fraunces', serif", fontStyle: 'italic'
+                    }}>
+                      {m.closeout ? 'No photo' : '—'}
+                    </div>
+                  )}
+                  {/* Month label overlay */}
+                  <div style={{
+                    position: 'absolute', top: 10, left: 12,
+                    padding: '4px 10px',
+                    background: 'rgba(0,0,0,0.55)',
+                    color: '#fff', borderRadius: 6,
+                    fontFamily: "'Fraunces', serif",
+                    fontSize: 13, fontWeight: 500
+                  }}>
+                    {m.label}
+                  </div>
+                </div>
+
+                {/* Stats footer */}
+                <div style={{padding: '12px 14px', flex: 1}}>
+                  {m.closeout ? (
+                    <>
+                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: 6}}>
+                        <span style={{fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600}}>
+                          Saved
+                        </span>
+                        <span className="num" style={{
+                          fontSize: 13, fontWeight: 600,
+                          color: m.savingsRate >= 0 ? 'var(--sage-ink)' : 'var(--terra-ink)'
+                        }}>
+                          {(m.savingsRate * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: 6}}>
+                        <span style={{fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600}}>
+                          Spent
+                        </span>
+                        <span className="num" style={{fontSize: 13, color: 'var(--ink-2)'}}>
+                          {fmt(m.expenses)}
+                        </span>
+                      </div>
+                      {m.biggestCat && (
+                        <div style={{
+                          fontSize: 11, color: 'var(--ink-3)',
+                          marginTop: 8, paddingTop: 8,
+                          borderTop: '1px solid var(--line)',
+                          fontStyle: 'italic'
+                        }}>
+                          Biggest: {m.biggestCat} ({fmt(m.biggestAmt)})
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{
+                      fontSize: 12, color: 'var(--ink-3)',
+                      textAlign: 'center', padding: '16px 0',
+                      fontStyle: 'italic'
+                    }}>
+                      Not closed out
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: 18, padding: '12px 14px',
+            background: 'var(--bg-soft)', borderRadius: 10,
+            fontSize: 12, color: 'var(--ink-3)',
+            fontStyle: 'italic', fontFamily: "'Fraunces', serif"
+          }}>
+            Tap any month to revisit its closeout and add or change its photo.
+          </div>
+        </div>
+      );
+    }
+    window.YearInReviewView = YearInReviewView;
+
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, NetWorthChart, YearInReviewView, BalanceUpdateModal, MobileTabBar, MobilePeriodPicker, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
   
 })();
 </script>
@@ -3858,8 +4083,8 @@
     // Always celebratory in tone. Shows summary stats with copy that
     // adapts to whether they came in under or over budget, but never
     // makes them feel bad — even rough months get encouragement.
-    var CelebrationModal = function({ open, onClose, summary }) {
-      const { useEffect, useState } = React;
+    var CelebrationModal = function({ open, onClose, summary, closeout, onUploadPhoto, onDeletePhoto }) {
+      const { useEffect, useState, useRef } = React;
       // Confetti pieces — tiny colored squares that fall and rotate
       const [pieces] = useState(() => {
         const colors = ['var(--sage)', 'var(--terracotta)', 'var(--blue)', 'var(--amber)', 'var(--plum)'];
@@ -3877,12 +4102,92 @@
         return out;
       });
 
+      // Photo upload state — separate from closeout's photo_path so we
+      // can show optimistic preview while the upload is in flight.
+      const [uploadingPhoto, setUploadingPhoto] = useState(false);
+      const [photoPreview, setPhotoPreview] = useState(null); // local blob URL for immediate display
+      const fileInputRef = useRef(null);
+
       useEffect(() => {
-        if (!open) return;
+        if (!open) {
+          // Clear any preview when modal closes (avoids stale blob URLs)
+          if (photoPreview) {
+            URL.revokeObjectURL(photoPreview);
+            setPhotoPreview(null);
+          }
+          return;
+        }
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
       }, [open, onClose]);
+
+      // Compress an image file to ~1200px max dimension, JPEG 80%.
+      // Reduces a 12MB iPhone photo to ~300-500KB without visible loss.
+      const compressImage = (file) => new Promise((resolve, reject) => {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (e) => { img.src = e.target.result; };
+        reader.onerror = reject;
+        img.onload = () => {
+          const MAX = 1200;
+          let { width, height } = img;
+          if (width > height && width > MAX) {
+            height = Math.round(height * (MAX / width));
+            width = MAX;
+          } else if (height > MAX) {
+            width = Math.round(width * (MAX / height));
+            height = MAX;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => {
+            if (blob) resolve(blob);
+            else reject(new Error('Failed to compress image'));
+          }, 'image/jpeg', 0.8);
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        reader.readAsDataURL(file);
+      });
+
+      const handleFileChosen = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // reset so picking the same file again re-fires
+        if (!file || !closeout) return;
+        try {
+          // Show local preview immediately
+          const previewUrl = URL.createObjectURL(file);
+          setPhotoPreview(previewUrl);
+          setUploadingPhoto(true);
+          // Compress + upload
+          const blob = await compressImage(file);
+          await onUploadPhoto({ year: closeout.year, month: closeout.month, blob });
+        } catch (err) {
+          console.error('Photo upload failed:', err);
+          alert('Could not upload photo: ' + err.message);
+          setPhotoPreview(null);
+        } finally {
+          setUploadingPhoto(false);
+        }
+      };
+
+      const handleDeletePhoto = async () => {
+        if (!closeout) return;
+        if (!confirm('Remove this photo?')) return;
+        try {
+          await onDeletePhoto({
+            year: closeout.year,
+            month: closeout.month,
+            path: closeout.photo_path
+          });
+          setPhotoPreview(null);
+        } catch (err) {
+          alert('Could not remove photo: ' + err.message);
+        }
+      };
 
       if (!open || !summary) return null;
 
@@ -3891,6 +4196,13 @@
       const positiveLeftover = leftover >= 0;
       const goodSavingsRate = savingsRate >= 0.15;
       const allUnderBudget = underBudgetCount === totalBudgetedCount && totalBudgetedCount > 0;
+
+      // Resolve photo URL: local preview wins (instant), then stored URL
+      const storedPhotoUrl = closeout?.photo_path && window.__SupaStore?.getCloseoutPhotoUrl
+        ? window.__SupaStore.getCloseoutPhotoUrl(closeout.photo_path)
+        : null;
+      const displayPhotoUrl = photoPreview || storedPhotoUrl;
+      const hasPhoto = !!displayPhotoUrl;
 
       // Headline: warm and adaptive
       let headline, subline;
@@ -4013,6 +4325,86 @@
               )}
             </div>
 
+            {/* Photo of the month — optional, attaches to this closeout */}
+            {closeout && (
+              <div style={{
+                marginTop: 18, padding: '14px 16px',
+                background: 'var(--bg-soft)', borderRadius: 12
+              }}>
+                {hasPhoto ? (
+                  <div>
+                    <div style={{
+                      borderRadius: 10, overflow: 'hidden',
+                      maxHeight: 240, display: 'flex', justifyContent: 'center',
+                      background: 'var(--bg)'
+                    }}>
+                      <img
+                        src={displayPhotoUrl}
+                        alt={`${monthName} ${year}`}
+                        style={{
+                          maxWidth: '100%', maxHeight: 240,
+                          objectFit: 'contain',
+                          opacity: uploadingPhoto ? 0.6 : 1,
+                          transition: 'opacity 0.2s'
+                        }}
+                      />
+                    </div>
+                    <div style={{
+                      marginTop: 10, display: 'flex',
+                      justifyContent: 'space-between', alignItems: 'center',
+                      fontSize: 12, color: 'var(--ink-3)'
+                    }}>
+                      <span style={{fontStyle: 'italic'}}>
+                        {uploadingPhoto ? 'Uploading…' : `A moment from ${monthName}`}
+                      </span>
+                      <span style={{display: 'flex', gap: 8}}>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          style={{fontSize: 12, color: 'var(--ink-2)', textDecoration: 'underline'}}
+                        >Replace</button>
+                        <button
+                          onClick={handleDeletePhoto}
+                          style={{fontSize: 12, color: 'var(--terra-ink)', textDecoration: 'underline'}}
+                        >Remove</button>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      width: '100%', padding: '24px 16px',
+                      border: '2px dashed var(--line-strong)',
+                      borderRadius: 10,
+                      background: 'transparent',
+                      color: 'var(--ink-2)',
+                      fontSize: 14,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--ink-3)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--line-strong)'}
+                  >
+                    <div style={{fontSize: 24, marginBottom: 6}}>📷</div>
+                    <div style={{fontFamily: "'Fraunces', serif", fontStyle: 'italic'}}>
+                      Add a photo from this month
+                    </div>
+                    <div style={{fontSize: 11, color: 'var(--ink-3)', marginTop: 4}}>
+                      Optional · becomes part of your year-in-review
+                    </div>
+                  </button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  style={{display: 'none'}}
+                  onChange={handleFileChosen}
+                />
+              </div>
+            )}
+
             <button className="btn btn-primary celebration-close" onClick={onClose}>
               Continue
             </button>
@@ -4029,7 +4421,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, MobileTabBar, MobilePeriodPicker, MobileSankey, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
+    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, YearInReviewView, MobileTabBar, MobilePeriodPicker, MobileSankey, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -4217,7 +4609,7 @@
         );
       });
       const [view, setView] = useState(() =>
-        lv('view', 'month', v => ['month','year','all','flow','networth'].includes(v))
+        lv('view', 'month', v => ['month','year','all','flow','networth','review'].includes(v))
       );
       const [flowPeriod, setFlowPeriod] = useState(() =>
         lv('flowPeriod', 'month', v => ['month','year','all'].includes(v))
@@ -4715,6 +5107,7 @@
         return {
           monthName: MONTHS_LONG[mIdx],
           year: y,
+          monthIdx: mIdx,
           income: inc,
           expenses: exp,
           savings: sav,
@@ -4759,6 +5152,37 @@
           if (snapshot) setCloseouts(prev => [...prev, snapshot]);
           alert('Could not reopen month: ' + err.message);
         });
+      };
+
+      // ---- Closeout photo handlers ----
+      // Upload a photo for a closed-out month. Updates the closeout
+      // row optimistically so the modal can display it instantly.
+      const handleUploadCloseoutPhoto = async ({ year: y, month, blob }) => {
+        if (!window.__SupaStore?.uploadCloseoutPhoto) {
+          throw new Error('Upload not available');
+        }
+        const path = await window.__SupaStore.uploadCloseoutPhoto({ year: y, month, blob });
+        // Update local closeout state with the new photo_path
+        setCloseouts(prev => prev.map(c =>
+          (c.year === y && c.month === month) ? { ...c, photo_path: path } : c
+        ));
+        return path;
+      };
+
+      const handleDeleteCloseoutPhoto = async ({ year: y, month, path }) => {
+        if (!window.__SupaStore?.deleteCloseoutPhoto) {
+          throw new Error('Delete not available');
+        }
+        await window.__SupaStore.deleteCloseoutPhoto({ year: y, month, path });
+        setCloseouts(prev => prev.map(c =>
+          (c.year === y && c.month === month) ? { ...c, photo_path: null } : c
+        ));
+      };
+
+      // Open the celebration modal for a previously-closed month.
+      // Used by the year-in-review gallery.
+      const openCloseoutFromGallery = (closeout, y, mIdx) => {
+        setCelebration(buildCelebrationSummary(y, mIdx));
       };
 
       // ---- Net worth handlers ----
@@ -4949,6 +5373,9 @@
           <CelebrationModal
             open={!!celebration}
             summary={celebration}
+            closeout={celebration ? closeouts.find(c => c.year === celebration.year && c.month === celebration.monthIdx + 1) : null}
+            onUploadPhoto={handleUploadCloseoutPhoto}
+            onDeletePhoto={handleDeleteCloseoutPhoto}
             onClose={() => setCelebration(null)}
           />
 
@@ -4991,6 +5418,7 @@
                 <button className={view==='all'?'on':''} onClick={()=>setView('all')}>All time</button>
                 <button className={view==='flow'?'on':''} onClick={()=>setView('flow')}>Flow</button>
                 <button className={view==='networth'?'on':''} onClick={()=>setView('networth')}>Net Worth</button>
+                <button className={view==='review'?'on':''} onClick={()=>setView('review')}>Year in Review</button>
               </div>
               {view === 'month' && (
                 <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
@@ -5054,9 +5482,9 @@
             />
           </div>
 
-          {/* Hero — cash flow stats. Hidden in networth view since
-              that page is about balance, not flow. */}
-          {view !== 'networth' && (
+          {/* Hero — cash flow stats. Hidden in networth and review views
+              since those pages are about balance/history, not flow. */}
+          {view !== 'networth' && view !== 'review' && (
           <div className="hero">
             <div className="card feature">
               <div>
@@ -5105,7 +5533,7 @@
 
           {/* Allocation strip + category tabs — these belong to the budget
               table view, so we hide them on the Flow tab. */}
-          {view !== 'flow' && view !== 'networth' && (
+          {view !== 'flow' && view !== 'networth' && view !== 'review' && (
             <>
               <AllocationStrip totals={totals} view={statsView} year={year} monthName={MONTHS[monthIdx]}/>
               <div className="tabs">
@@ -5135,6 +5563,15 @@
               snapshots={snapshots}
               onUpdateBalance={handleUpdateBalance}
               onDeleteSnapshot={handleDeleteSnapshot}
+            />
+          ) : view === 'review' ? (
+            <YearInReviewView
+              closeouts={closeouts}
+              txs={txs}
+              year={year}
+              setYear={setYear}
+              years={years}
+              onOpenCloseout={openCloseoutFromGallery}
             />
           ) : (
           <div className="main-grid">
