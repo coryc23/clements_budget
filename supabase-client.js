@@ -521,22 +521,53 @@
     // Upload a photo for a month closeout. The blob should be a
     // pre-compressed JPEG (the React side handles resizing). Returns
     // the storage path so the caller can save it on the closeout row.
+    //
+    // Cache busting: filename includes a timestamp suffix (e.g.
+    // "2026-04-1715091234567.jpg") so each upload gets a unique URL.
+    // Without this, browsers cache the old URL and show stale photos
+    // when the user replaces a month's photo. We also clean up the
+    // previous file from storage to avoid orphaned blobs.
     async uploadCloseoutPhoto({ year, month, blob }) {
-      const path = year + '-' + String(month).padStart(2, '0') + '.jpg';
+      // Look up the previous photo_path (if any) so we can delete it
+      // after the new upload succeeds.
+      const { data: existingRow } = await supabase
+        .from('month_closeouts')
+        .select('photo_path')
+        .eq('year', year)
+        .eq('month', month)
+        .maybeSingle();
+      const oldPath = existingRow?.photo_path || null;
+
+      // Build a unique path for this upload
+      const ts = Date.now();
+      const path = year + '-' + String(month).padStart(2, '0') + '-' + ts + '.jpg';
+
       const { error: upErr } = await supabase.storage
         .from('closeout-photos')
         .upload(path, blob, {
           contentType: 'image/jpeg',
-          upsert: true,
+          upsert: false,  // path is unique each time, no need to upsert
           cacheControl: '3600'
         });
       if (upErr) throw upErr;
+
       const { error: updErr } = await supabase
         .from('month_closeouts')
         .update({ photo_path: path })
         .eq('year', year)
         .eq('month', month);
       if (updErr) throw updErr;
+
+      // Best-effort cleanup of the old file. If it fails (e.g. file
+      // already gone), log but don't break the upload — the new file
+      // is what matters.
+      if (oldPath && oldPath !== path) {
+        const { error: delErr } = await supabase.storage
+          .from('closeout-photos')
+          .remove([oldPath]);
+        if (delErr) console.warn('Old photo cleanup failed (continuing):', delErr);
+      }
+
       bumpLastEdited();
       return path;
     },
