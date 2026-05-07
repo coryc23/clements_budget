@@ -1947,6 +1947,106 @@
     }
     window.MobileSankey = MobileSankey;
 
+    // PeriodChip — combined month/year picker for the desktop topbar.
+    // Replaces two separate dropdowns with a single chip showing the
+    // current period (e.g. "May 2026"), which opens a popover with the
+    // month and year selectors stacked. Reduces visual clutter when
+    // both controls don't need to be visible all the time.
+    //
+    // Props:
+    //   view       — 'month' | 'year' (others render nothing)
+    //   monthIdx   — current month index (0-11)
+    //   year       — current year
+    //   setMonthIdx, setYear — state setters
+    //   years      — array of valid years to choose from
+    var PeriodChip = function({ view, monthIdx, year, setMonthIdx, setYear, years }) {
+      const { useState, useEffect, useRef } = React;
+      const [open, setOpen] = useState(false);
+      const ref = useRef(null);
+
+      // Close on outside click or Escape
+      useEffect(() => {
+        if (!open) return;
+        const onDoc = (e) => {
+          if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onDoc);
+        window.addEventListener('keydown', onKey);
+        return () => {
+          document.removeEventListener('mousedown', onDoc);
+          window.removeEventListener('keydown', onKey);
+        };
+      }, [open]);
+
+      if (view !== 'month' && view !== 'year') return null;
+
+      const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const label = view === 'month'
+        ? `${MONTHS_LONG[monthIdx]} ${year}`
+        : `${year}`;
+
+      return (
+        <div ref={ref} style={{position: 'relative'}}>
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="select-month"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              cursor: 'pointer'
+            }}
+            aria-expanded={open}
+            aria-haspopup="true"
+          >
+            <span>{label}</span>
+            <span style={{fontSize: 10, opacity: 0.6, marginTop: 1}}>▾</span>
+          </button>
+          {open && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+              minWidth: 200, padding: 12,
+              background: 'var(--bg-elev)', border: '1px solid var(--line)',
+              borderRadius: 10,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
+              zIndex: 40,
+              display: 'flex', flexDirection: 'column', gap: 10
+            }}>
+              {view === 'month' && (
+                <div>
+                  <div style={{fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 4}}>
+                    Month
+                  </div>
+                  <select
+                    className="select-month"
+                    value={monthIdx}
+                    onChange={e => setMonthIdx(parseInt(e.target.value))}
+                    style={{width: '100%'}}
+                    autoFocus
+                  >
+                    {MONTHS_LONG.map((m,i) => <option key={i} value={i}>{m}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <div style={{fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 4}}>
+                  Year
+                </div>
+                <select
+                  className="select-year"
+                  value={year}
+                  onChange={e => setYear(parseInt(e.target.value))}
+                  style={{width: '100%'}}
+                >
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    window.PeriodChip = PeriodChip;
+
     var GreetingLine = function() {
       const { useState, useEffect } = React;
       // Re-render every minute so the greeting shifts with the day
@@ -3704,7 +3804,7 @@
     }
     window.YearInReviewView = YearInReviewView;
 
-    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, NetWorthChart, YearInReviewView, BalanceUpdateModal, MobileTabBar, MobilePeriodPicker, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
+    Object.assign(window, { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, NetWorthChart, YearInReviewView, BalanceUpdateModal, MobileTabBar, MobilePeriodPicker, MobileSankey, AllocationStrip, FactCard, GreetingCard, GreetingLine, PeriodChip, LastEditedBy, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned });
   
 })();
 </script>
@@ -4421,7 +4521,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, YearInReviewView, MobileTabBar, MobilePeriodPicker, MobileSankey, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
+    const { Bar, Donut, Spark, Sankey, FlowView, NetWorthView, YearInReviewView, MobileTabBar, MobilePeriodPicker, MobileSankey, PeriodChip, ACCENTS, fmt, fmtCents, fmtCompact, fmtSigned, TxModal, ConfirmModal, FastEntryBar, CelebrationModal, LastEditedBy, GreetingCard, GreetingLine,
             colorFor, glyphFor, isEmojiGlyph, tagFor, YEAR, MONTHS, MONTHS_LONG,
             INCOME_BUDGET, EXPENSE_BUDGET, SAVINGS_BUDGET,
             BUDGETS_BY_YEAR, INCOME_CATS, EXPENSE_CATS, SAVINGS_CATS } = window;
@@ -5418,18 +5518,20 @@
                 <button className={view==='all'?'on':''} onClick={()=>setView('all')}>All time</button>
                 <button className={view==='flow'?'on':''} onClick={()=>setView('flow')}>Flow</button>
                 <button className={view==='networth'?'on':''} onClick={()=>setView('networth')}>Net Worth</button>
-                <button className={view==='review'?'on':''} onClick={()=>setView('review')}>Year in Review</button>
+                <button className={view==='review'?'on':''} onClick={()=>setView('review')}>Recap</button>
               </div>
-              {view === 'month' && (
-                <select className="select-month" value={monthIdx} onChange={e=>setMonthIdx(parseInt(e.target.value))}>
-                  {MONTHS_LONG.map((m,i) => <option key={i} value={i}>{m}</option>)}
-                </select>
-              )}
-              {(view === 'month' || view === 'year') && (
-                <select className="select-year" value={year} onChange={e=>setYear(parseInt(e.target.value))}>
-                  {years.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              )}
+              {/* Combined month + year picker. Shows "May 2026" on Month
+                  view, "2026" on Year view; opens a popover with both
+                  selectors. Replaces two separate dropdowns to reduce
+                  topbar clutter. */}
+              <PeriodChip
+                view={view}
+                monthIdx={monthIdx}
+                year={year}
+                setMonthIdx={setMonthIdx}
+                setYear={setYear}
+                years={years}
+              />
             </div>
 
             <div className="actions">
