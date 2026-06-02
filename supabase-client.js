@@ -703,6 +703,19 @@
           .eq('id', accountId);
       }
       bumpLastEdited();
+    },
+
+    // Toggle the `excluded` flag on an account. Excluded accounts don't
+    // count toward net worth headline / chart, but stay visible in the
+    // account list (dimmed). Shared household-wide via realtime — same
+    // UPDATE channel as balance changes.
+    async setAccountExcluded({ accountId, excluded }) {
+      const { error } = await supabase
+        .from('accounts')
+        .update({ excluded: !!excluded })
+        .eq('id', accountId);
+      if (error) throw error;
+      bumpLastEdited();
     }
   };
   window.__SupaStore = SupaStore;
@@ -817,6 +830,11 @@
     markWritten('snapshot:' + args.snapshotId);
     markWritten('account:' + args.accountId);
     return _deleteSnapshot.call(this, args);
+  };
+  const _setAccountExcluded = SupaStore.setAccountExcluded;
+  SupaStore.setAccountExcluded = async function(args) {
+    markWritten('account:' + args.accountId);
+    return _setAccountExcluded.call(this, args);
   };
 
   // Events that arrive before React has mounted get buffered here.

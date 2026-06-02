@@ -3084,7 +3084,7 @@
     // the exact value, date, and change since the start of the window.
     // Designed to feel like the chart in Robinhood / Fidelity / Personal
     // Capital — familiar, focused, no clutter.
-    var NetWorthChart = function({ snapshots, accounts }) {
+    var NetWorthChart = function({ snapshots, accounts, showExcludedOverlay, setShowExcludedOverlay, hasExcluded }) {
       const { useState, useMemo, useRef, useEffect } = React;
       // Selected time window. Defaults to '1Y' if there's at least
       // ~10 months of data, else 'All' so a new user sees everything.
@@ -3102,10 +3102,12 @@
       const [hoverIdx, setHoverIdx] = useState(null); // null = no hover
       const svgRef = useRef(null);
 
-      // Build the full monthly history series — same algorithm
-      // NetWorthView uses, but inlined here so the chart is self-
-      // contained.
-      const fullSeries = useMemo(() => {
+      // Build a monthly history series given a predicate that decides
+      // whether to include each account. We compute two series:
+      //   - primary: included accounts only (matches the headline)
+      //   - overlay: all accounts (shown as comparison line on toggle)
+      // Same algorithm both times; only the filter differs.
+      const buildSeries = (includeFn) => {
         if (snapshots.length === 0) return [];
         const sorted = [...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
         const startDate = new Date(sorted[0].snapshot_date);
@@ -3129,14 +3131,18 @@
           for (const [aid, bal] of balances) {
             const acct = accounts.find(a => a.id === aid);
             if (!acct) continue;
+            if (!includeFn(acct)) continue;
             net += acct.kind === 'asset' ? bal : -bal;
           }
-          // Date represents end-of-month for tooltip clarity
           const dateLabel = new Date(month.y, month.m, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
           result.push({ y: month.y, m: month.m, net, dateLabel });
         }
         return result;
-      }, [snapshots, accounts]);
+      };
+      // Primary series: included only (matches headline)
+      const fullSeries = useMemo(() => buildSeries(a => !a.excluded), [snapshots, accounts]);
+      // Overlay series: ALL accounts (only used when toggle is on)
+      const fullSeriesAll = useMemo(() => buildSeries(() => true), [snapshots, accounts]);
 
       // Filter to the selected period. Period chips slice the END of
       // the series, so '1M' shows the most recent 1 month, etc.
@@ -3146,6 +3152,16 @@
         // Keep monthsBack+1 points so we get a real "from" baseline
         return fullSeries.slice(-(monthsBack + 1));
       }, [fullSeries, period]);
+
+      // Overlay series — same period filter, all-accounts version.
+      // Only computed/used when the overlay toggle is on and there's
+      // actually something excluded to compare against.
+      const overlaySeries = useMemo(() => {
+        if (!showExcludedOverlay || !hasExcluded) return [];
+        if (period === 'All') return fullSeriesAll;
+        const monthsBack = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 }[period] || 12;
+        return fullSeriesAll.slice(-(monthsBack + 1));
+      }, [fullSeriesAll, period, showExcludedOverlay, hasExcluded]);
 
       // Empty state — no data yet
       if (snapshots.length === 0) {
@@ -3169,21 +3185,30 @@
       const innerW = W - PAD.left - PAD.right;
       const innerH = H - PAD.top - PAD.bottom;
 
-      // Y-axis scale. Pad above/below the data range by 8% so the
-      // line has breathing room and doesn't touch the edges.
-      const values = series.map(p => p.net);
-      const minVal = Math.min(...values);
-      const maxVal = Math.max(...values);
+      // Y-axis scale. Include overlay values in the min/max if the
+      // overlay is being shown, so the chart fits both lines cleanly.
+      const allValues = [...series.map(p => p.net), ...overlaySeries.map(p => p.net)];
+      const minVal = Math.min(...allValues);
+      const maxVal = Math.max(...allValues);
       const range = Math.max(1, maxVal - minVal);
       const yMin = minVal - range * 0.08;
       const yMax = maxVal + range * 0.08;
       const yScale = (v) => PAD.top + innerH * (1 - (v - yMin) / (yMax - yMin));
       const xScale = (i) => PAD.left + (series.length === 1 ? innerW / 2 : (innerW * i / (series.length - 1)));
 
-      // Line path
+      // Line path (primary — included only)
       const linePath = series.map((p, i) =>
         (i === 0 ? 'M' : 'L') + xScale(i) + ',' + yScale(p.net)
       ).join(' ');
+
+      // Overlay line path (all accounts, including excluded)
+      // Uses the same x-index, which is safe because both series cover
+      // the same months (same source snapshots, just different filters).
+      const overlayLinePath = overlaySeries.length >= 2
+        ? overlaySeries.map((p, i) =>
+            (i === 0 ? 'M' : 'L') + xScale(i) + ',' + yScale(p.net)
+          ).join(' ')
+        : '';
 
       // Area fill path (line + close down to bottom)
       const areaPath = onlyOnePoint
@@ -3242,27 +3267,54 @@
 
       return (
         <div style={{marginTop: 18}}>
-          {/* Period chips */}
+          {/* Controls row: overlay toggle on left (only when relevant),
+              period chips on right. */}
           <div style={{
             display: 'flex', gap: 4, marginBottom: 14,
-            justifyContent: 'flex-end', flexWrap: 'wrap'
+            justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap'
           }}>
-            {periods.map(p => (
+            {hasExcluded ? (
               <button
-                key={p}
-                onClick={() => { setPeriod(p); setHoverIdx(null); }}
+                onClick={() => setShowExcludedOverlay?.(!showExcludedOverlay)}
                 style={{
-                  padding: '5px 12px',
-                  fontSize: 12, fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 10px',
+                  fontSize: 11, fontWeight: 500,
                   borderRadius: 999,
-                  background: period === p ? 'var(--ink)' : 'transparent',
-                  color: period === p ? 'var(--bg)' : 'var(--ink-3)',
-                  border: period === p ? '1px solid var(--ink)' : '1px solid var(--line)',
-                  transition: 'all 0.15s',
-                  letterSpacing: '0.02em'
+                  background: showExcludedOverlay ? 'var(--bg-soft)' : 'transparent',
+                  color: 'var(--ink-3)',
+                  border: '1px solid var(--line)',
+                  transition: 'all 0.15s'
                 }}
-              >{p}</button>
-            ))}
+                title={showExcludedOverlay ? 'Hide overlay' : 'Show all-accounts comparison'}
+              >
+                <span style={{
+                  display: 'inline-block', width: 18, height: 2,
+                  background: showExcludedOverlay ? 'var(--sage)' : 'var(--ink-3)',
+                  opacity: showExcludedOverlay ? 0.5 : 0.4,
+                  borderRadius: 2
+                }}/>
+                {showExcludedOverlay ? 'Hide hidden' : 'Show hidden'}
+              </button>
+            ) : <span/>}
+            <div style={{display: 'flex', gap: 4, flexWrap: 'wrap'}}>
+              {periods.map(p => (
+                <button
+                  key={p}
+                  onClick={() => { setPeriod(p); setHoverIdx(null); }}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: 12, fontWeight: 600,
+                    borderRadius: 999,
+                    background: period === p ? 'var(--ink)' : 'transparent',
+                    color: period === p ? 'var(--bg)' : 'var(--ink-3)',
+                    border: period === p ? '1px solid var(--ink)' : '1px solid var(--line)',
+                    transition: 'all 0.15s',
+                    letterSpacing: '0.02em'
+                  }}
+                >{p}</button>
+              ))}
+            </div>
           </div>
 
           {/* Chart */}
@@ -3325,7 +3377,23 @@
                 <path d={areaPath} fill="url(#nw-area-fill)"/>
               )}
 
-              {/* The line */}
+              {/* Comparison overlay line — shown only when toggle is on
+                  AND something is excluded. Drawn FIRST (behind primary
+                  line) in a lighter sage so the primary stays prominent. */}
+              {showExcludedOverlay && overlayLinePath && (
+                <path
+                  d={overlayLinePath}
+                  fill="none"
+                  stroke="var(--sage)"
+                  strokeWidth="1.75"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  strokeDasharray="5 4"
+                  opacity="0.7"
+                />
+              )}
+
+              {/* The primary line (included accounts only) */}
               <path
                 d={linePath}
                 fill="none"
@@ -3424,25 +3492,48 @@
     // NetWorthView — full Net Worth page. Shows total + history chart,
     // then a list of account groups, each with their accounts and
     // current balances.
-    var NetWorthView = function({ accounts, snapshots, onUpdateBalance, onDeleteSnapshot }) {
+    var NetWorthView = function({ accounts, snapshots, onUpdateBalance, onDeleteSnapshot, onSetExcluded }) {
       const { useState, useMemo } = React;
       const [editingAccount, setEditingAccount] = useState(null);
+      // Toggle in the chart to show what's currently being excluded
+      // (as a lighter comparison line). Only meaningful when at least
+      // one account is excluded — UI hides it otherwise.
+      const [showExcludedOverlay, setShowExcludedOverlay] = useState(false);
 
-      // Compute totals
+      // Compute totals — split into included vs excluded so we can
+      // show both the "real" net worth (included only) and how much
+      // is being hidden.
       const totals = useMemo(() => {
         let assets = 0, liabilities = 0;
+        let excludedAssets = 0, excludedLiabilities = 0;
+        let excludedCount = 0;
         for (const a of accounts) {
-          if (a.kind === 'asset') assets += parseFloat(a.current_balance) || 0;
-          else liabilities += parseFloat(a.current_balance) || 0;
+          const bal = parseFloat(a.current_balance) || 0;
+          if (a.excluded) {
+            excludedCount++;
+            if (a.kind === 'asset') excludedAssets += bal;
+            else excludedLiabilities += bal;
+          } else {
+            if (a.kind === 'asset') assets += bal;
+            else liabilities += bal;
+          }
         }
-        return { assets, liabilities, net: assets - liabilities };
+        return {
+          assets, liabilities,
+          net: assets - liabilities,
+          excludedAssets, excludedLiabilities,
+          excludedNet: excludedAssets - excludedLiabilities,
+          excludedCount
+        };
       }, [accounts]);
 
-      // Group totals
+      // Group totals (included only) — used for group-level subtotal
+      // display. Excluded accounts in the group don't add to this.
       const groupTotals = useMemo(() => {
         const m = {};
         for (const g of NW_GROUPS) m[g.key] = 0;
         for (const a of accounts) {
+          if (a.excluded) continue;
           if (m[a.group_key] !== undefined) {
             m[a.group_key] += parseFloat(a.current_balance) || 0;
           }
@@ -3451,14 +3542,15 @@
       }, [accounts]);
 
       // Build net worth time series from snapshots.
-      // Strategy: sample every month; for each month, take the most
-      // recent balance for each account as of that month's end.
+      // Now respects exclusions: snapshots for excluded accounts are
+      // ignored in the main series. Strategy: sample every month; for
+      // each month, take the most recent balance for each INCLUDED
+      // account as of that month's end.
       const history = useMemo(() => {
         if (snapshots.length === 0) return [];
         const sorted = [...snapshots].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
         const startDate = new Date(sorted[0].snapshot_date);
         const endDate = new Date();
-        // Generate month buckets from start to today
         const months = [];
         let y = startDate.getFullYear(), m = startDate.getMonth();
         const endY = endDate.getFullYear(), endM = endDate.getMonth();
@@ -3466,8 +3558,6 @@
           months.push({ y, m, label: y + '-' + String(m+1).padStart(2,'0') });
           m++; if (m > 11) { m = 0; y++; }
         }
-        // For each month, walk through snapshots up to month-end and
-        // keep the latest balance per account
         const result = [];
         for (const month of months) {
           const cutoff = new Date(month.y, month.m + 1, 0).toISOString().slice(0,10);
@@ -3476,11 +3566,11 @@
             if (s.snapshot_date > cutoff) break;
             balances.set(s.account_id, parseFloat(s.balance) || 0);
           }
-          // Net worth = sum of balances, weighted by kind
           let net = 0;
           for (const [aid, bal] of balances) {
             const acct = accounts.find(a => a.id === aid);
             if (!acct) continue;
+            if (acct.excluded) continue;  // ← key change: skip excluded
             net += acct.kind === 'asset' ? bal : -bal;
           }
           result.push({ label: month.label, net });
@@ -3514,11 +3604,28 @@
                 </span>
               )}
             </div>
+            {totals.excludedCount > 0 && (
+              <div style={{
+                fontSize: 12, color: 'var(--ink-3)', marginTop: 6,
+                fontStyle: 'italic', opacity: 0.85
+              }}>
+                Hidden: {fmt(totals.excludedNet)} across {totals.excludedCount} {totals.excludedCount === 1 ? 'account' : 'accounts'}
+              </div>
+            )}
           </div>
 
           {/* Big interactive chart — replaces the previous small Spark.
-              Always renders; handles its own empty state internally. */}
-          <NetWorthChart snapshots={snapshots} accounts={accounts} />
+              Always renders; handles its own empty state internally.
+              Receives `accounts` so it can apply exclusions internally,
+              and gets an external "show overlay" prop driven by the
+              toggle below it (when there's anything to overlay). */}
+          <NetWorthChart
+            snapshots={snapshots}
+            accounts={accounts}
+            showExcludedOverlay={showExcludedOverlay}
+            setShowExcludedOverlay={setShowExcludedOverlay}
+            hasExcluded={totals.excludedCount > 0}
+          />
 
           {!hasAnyData && (
             <div style={{
@@ -3534,17 +3641,40 @@
             </div>
           )}
 
-          {/* Group cards */}
+          {/* Group cards.
+              Each group has an eye-icon toggle in the header that
+              toggles all its accounts. Each row has its own eye toggle.
+              Excluded accounts/groups stay visible but are dimmed to
+              signal they don't count toward net worth. */}
           <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
             {NW_GROUPS.map(g => {
               const accts = accounts.filter(a => a.group_key === g.key)
                 .sort((a, b) => a.sort_order - b.sort_order);
               if (accts.length === 0) return null;
               const total = groupTotals[g.key];
+              const allExcluded = accts.every(a => a.excluded);
+              const someExcluded = accts.some(a => a.excluded);
+              // Click the group eye: if ANY are included, exclude all.
+              // If ALL are excluded, include all. (Matches "the group is
+              // visible, click to hide" intuition.)
+              const toggleGroup = () => {
+                const target = !accts.every(a => a.excluded);
+                for (const a of accts) {
+                  if (!!a.excluded !== target) {
+                    onSetExcluded?.({ accountId: a.id, excluded: target });
+                  }
+                }
+              };
+              // Visual: when all are excluded, dim the whole card.
+              // When some are excluded, keep card normal (mixed state).
+              const groupOpacity = allExcluded ? 0.55 : 1;
+
               return (
                 <div key={g.key} style={{
                   border: '1px solid var(--line)', borderRadius: 14,
-                  background: 'var(--bg-elev)', overflow: 'hidden'
+                  background: 'var(--bg-elev)', overflow: 'hidden',
+                  opacity: groupOpacity,
+                  transition: 'opacity 0.2s'
                 }}>
                   <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -3556,46 +3686,121 @@
                       <span style={{fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 500, color: 'var(--ink)'}}>
                         {g.label}
                       </span>
+                      {someExcluded && !allExcluded && (
+                        <span style={{
+                          fontSize: 10, color: 'var(--ink-3)', fontStyle: 'italic',
+                          marginLeft: 4
+                        }}>
+                          (some hidden)
+                        </span>
+                      )}
                     </div>
-                    <span className="num" style={{
-                      fontSize: 16, fontWeight: 600,
-                      color: g.kind === 'liability' ? 'var(--terra-ink)' : 'var(--ink)'
-                    }}>
-                      {g.kind === 'liability' ? '−' : ''}{fmt(total)}
-                    </span>
+                    <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+                      <span className="num" style={{
+                        fontSize: 16, fontWeight: 600,
+                        color: g.kind === 'liability' ? 'var(--terra-ink)' : 'var(--ink)',
+                        fontStyle: allExcluded ? 'italic' : 'normal'
+                      }}>
+                        {g.kind === 'liability' ? '−' : ''}{fmt(allExcluded ? 0 : total)}
+                      </span>
+                      {/* Group-level eye toggle */}
+                      <button
+                        onClick={toggleGroup}
+                        title={allExcluded ? 'Show all in this group' : 'Hide all in this group'}
+                        aria-label={allExcluded ? 'Show all' : 'Hide all'}
+                        style={{
+                          padding: 6, lineHeight: 0, borderRadius: 6,
+                          color: allExcluded ? 'var(--ink-3)' : 'var(--ink-2)',
+                          opacity: someExcluded && !allExcluded ? 0.7 : 1,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {allExcluded ? (
+                          /* Eye-slash icon */
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </svg>
+                        ) : (
+                          /* Eye-open icon */
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div>
-                    {accts.map(a => (
-                      <div key={a.id} style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto auto',
-                        gap: 16, alignItems: 'center',
-                        padding: '12px 20px',
-                        borderBottom: '1px solid var(--line)'
-                      }}>
-                        <div>
-                          <div style={{fontWeight: 500, fontSize: 14, color: 'var(--ink)'}}>{a.name}</div>
-                          <div style={{fontSize: 11, color: 'var(--ink-3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8}}>
-                            <span>Updated {timeSince(a.last_updated_at)}</span>
-                            {isStale(a) && a.current_balance > 0 && (
-                              <span style={{color: 'var(--amber-ink)', fontWeight: 500}}>· stale</span>
-                            )}
-                            {a.notes && <span style={{fontStyle: 'italic'}}>· {a.notes}</span>}
-                          </div>
-                        </div>
-                        <div className="num" style={{
-                          fontSize: 15, fontWeight: 500,
-                          color: a.current_balance > 0 ? 'var(--ink)' : 'var(--ink-3)'
+                    {accts.map(a => {
+                      const isExcluded = !!a.excluded;
+                      return (
+                        <div key={a.id} style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr auto auto auto',
+                          gap: 12, alignItems: 'center',
+                          padding: '12px 20px',
+                          borderBottom: '1px solid var(--line)',
+                          opacity: isExcluded ? 0.55 : 1,
+                          transition: 'opacity 0.2s'
                         }}>
-                          {fmt(parseFloat(a.current_balance) || 0)}
+                          <div>
+                            <div style={{
+                              fontWeight: 500, fontSize: 14,
+                              color: 'var(--ink)',
+                              fontStyle: isExcluded ? 'italic' : 'normal'
+                            }}>{a.name}</div>
+                            <div style={{fontSize: 11, color: 'var(--ink-3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8}}>
+                              <span>Updated {timeSince(a.last_updated_at)}</span>
+                              {isStale(a) && a.current_balance > 0 && !isExcluded && (
+                                <span style={{color: 'var(--amber-ink)', fontWeight: 500}}>· stale</span>
+                              )}
+                              {isExcluded && (
+                                <span style={{color: 'var(--ink-3)', fontWeight: 500, fontStyle: 'italic'}}>
+                                  · hidden
+                                </span>
+                              )}
+                              {a.notes && <span style={{fontStyle: 'italic'}}>· {a.notes}</span>}
+                            </div>
+                          </div>
+                          <div className="num" style={{
+                            fontSize: 15, fontWeight: 500,
+                            color: a.current_balance > 0 ? 'var(--ink)' : 'var(--ink-3)',
+                            fontStyle: isExcluded ? 'italic' : 'normal'
+                          }}>
+                            {fmt(parseFloat(a.current_balance) || 0)}
+                          </div>
+                          {/* Per-account eye toggle */}
+                          <button
+                            onClick={() => onSetExcluded?.({ accountId: a.id, excluded: !isExcluded })}
+                            title={isExcluded ? 'Include in net worth' : 'Hide from net worth'}
+                            aria-label={isExcluded ? 'Include' : 'Hide'}
+                            style={{
+                              padding: 4, lineHeight: 0, borderRadius: 6,
+                              color: isExcluded ? 'var(--ink-3)' : 'var(--ink-2)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {isExcluded ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                              </svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            className="btn"
+                            onClick={() => setEditingAccount(a)}
+                            style={{fontSize: 12, padding: '6px 12px'}}
+                          >Update</button>
                         </div>
-                        <button
-                          className="btn"
-                          onClick={() => setEditingAccount(a)}
-                          style={{fontSize: 12, padding: '6px 12px'}}
-                        >Update</button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -5439,6 +5644,22 @@
         });
       };
 
+      // Toggle an account's "excluded" flag. Excluded accounts stay
+      // visible in the list (dimmed) but don't count toward the net
+      // worth headline or chart. Optimistic update + DB sync.
+      const handleSetAccountExcluded = ({ accountId, excluded }) => {
+        if (!window.__SupaStore?.setAccountExcluded) return;
+        const prev = accounts.find(a => a.id === accountId)?.excluded;
+        // Optimistic
+        setAccounts(p => p.map(a => a.id === accountId ? { ...a, excluded } : a));
+        window.__SupaStore.setAccountExcluded({ accountId, excluded }).catch(err => {
+          console.error('Set excluded failed:', err);
+          // Roll back
+          setAccounts(p => p.map(a => a.id === accountId ? { ...a, excluded: prev } : a));
+          alert('Could not update exclusion: ' + err.message);
+        });
+      };
+
       // Add a new category. Appended to every year's block (with zero budgets)
       // so it shows up consistently regardless of which year is selected.
       const addCategory = (type, name) => {
@@ -5812,6 +6033,7 @@
               snapshots={snapshots}
               onUpdateBalance={handleUpdateBalance}
               onDeleteSnapshot={handleDeleteSnapshot}
+              onSetExcluded={handleSetAccountExcluded}
             />
           ) : view === 'review' ? (
             <YearInReviewView
