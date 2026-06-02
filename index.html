@@ -3865,7 +3865,7 @@
   <script type="text/babel-pending" data-presets="react">
 /*__IIFE_WRAPPED__*/ (() => {
 
-    var TxModal = function({ open, onClose, onSave, categories, defaultDate, defaultType, defaultCategory, existingTx, prefillAmount, prefillDetails }) {
+    var TxModal = function({ open, onClose, onSave, categories, defaultDate, defaultType, defaultCategory, existingTx, prefillAmount, prefillDetails, prefillIsRefund }) {
       const { useState, useEffect } = React;
       const isEditing = !!existingTx;
       // isRefund: when true (and type === 'Expenses'), the saved amount
@@ -3893,7 +3893,9 @@
             isRefund
           });
         } else {
-          // Add mode: use smart defaults + any prefill from fast entry
+          // Add mode: use smart defaults + any prefill from fast entry.
+          // prefillIsRefund comes from the fast-entry parser when the
+          // user typed a negative amount with an expense category.
           const type = defaultType || 'Expenses';
           const cat  = defaultCategory && categories[type]?.includes(defaultCategory)
                      ? defaultCategory
@@ -3902,12 +3904,12 @@
             date: defaultDate,
             type,
             category: cat,
-            amount: prefillAmount != null ? String(prefillAmount) : '',
+            amount: prefillAmount != null ? String(Math.abs(prefillAmount)) : '',
             details: prefillDetails || '',
-            isRefund: false
+            isRefund: !!prefillIsRefund && type === 'Expenses'
           });
         }
-      }, [open, defaultDate, defaultType, defaultCategory, existingTx, prefillAmount, prefillDetails]);
+      }, [open, defaultDate, defaultType, defaultCategory, existingTx, prefillAmount, prefillDetails, prefillIsRefund]);
       if (!open) return null;
       const submit = () => {
         const amt = parseFloat(form.amount);
@@ -4058,22 +4060,31 @@
       let tokens = text.split(/\s+/);
 
       // Build a flat list of all category names with their type, lowercase
-      // for matching.
-      const catLookup = {};
+      // for matching. Includes a tokenized version for multi-word matching.
+      const catList = [];
       for (const type of ['Income', 'Expenses', 'Savings']) {
         for (const c of (categoriesByType[type] || [])) {
-          catLookup[c.toLowerCase()] = { name: c, type };
+          const lower = c.toLowerCase();
+          catList.push({
+            name: c,
+            type,
+            lower,
+            words: lower.split(/\s+/)
+          });
         }
       }
+      // Sort longest-first so multi-word names ("Cell Phone", "Roth IRA",
+      // "Cory 1") get matched before shorter overlapping names ("Cell",
+      // "Cory"). Without this, "Cory 1" would never be matched because
+      // "Cory" alone (if it existed) would consume the first token.
+      catList.sort((a, b) => b.words.length - a.words.length);
 
       // Pull out date tokens (MM/DD/YY or MM/DD/YYYY or YYYY-MM-DD)
       let date = null;
       tokens = tokens.filter(tok => {
         if (date) return true;
-        // YYYY-MM-DD
         let m = tok.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
         if (m) { date = `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; return false; }
-        // M/D/YY or M/D/YYYY
         m = tok.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
         if (m) {
           let yr = m[3];
@@ -4084,24 +4095,51 @@
         return true;
       });
 
-      // Pull out amount (first numeric token, optionally with $ or .)
+      // CATEGORIES BEFORE AMOUNTS. This is the critical ordering change.
+      // We match categories (multi-word, greedy by length) BEFORE looking
+      // for amounts. Otherwise tokens like "1" in "Cory 1" get claimed as
+      // the amount and the category fails to match.
+      //
+      // For each category (longest first), try to find its consecutive
+      // word sequence in the token list. If found, consume those tokens.
+      let categoryOverride = null;
+      const findAndConsumeCategory = () => {
+        for (const cat of catList) {
+          // Try to find cat.words as a consecutive sub-sequence in tokens
+          for (let i = 0; i <= tokens.length - cat.words.length; i++) {
+            let match = true;
+            for (let j = 0; j < cat.words.length; j++) {
+              if (tokens[i + j].toLowerCase() !== cat.words[j]) {
+                match = false;
+                break;
+              }
+            }
+            if (match) {
+              // Consume those tokens
+              tokens.splice(i, cat.words.length);
+              return cat;
+            }
+          }
+        }
+        return null;
+      };
+      categoryOverride = findAndConsumeCategory();
+
+      // Pull out amount AFTER categories so that numeric tokens that are
+      // part of a category name (like "1" in "Cory 1") aren't claimed.
+      // Allows a leading minus sign for refunds/returns.
       let amount = null;
+      let amountWasNegative = false;
       tokens = tokens.filter(tok => {
         if (amount !== null) return true;
         const cleaned = tok.replace(/^\$/, '');
-        if (/^\d+(\.\d{1,2})?$/.test(cleaned)) {
-          amount = parseFloat(cleaned);
+        // Match optional minus sign, then digits, then optional decimal
+        const m = cleaned.match(/^(-)?(\d+(?:\.\d{1,2})?)$/);
+        if (m) {
+          amount = parseFloat(m[2]);
+          if (m[1]) amountWasNegative = true;
           return false;
         }
-        return true;
-      });
-
-      // Look for an explicit category token (matches any known category name)
-      let categoryOverride = null;
-      tokens = tokens.filter(tok => {
-        if (categoryOverride) return true;
-        const hit = catLookup[tok.toLowerCase()];
-        if (hit) { categoryOverride = hit; return false; }
         return true;
       });
 
@@ -4109,7 +4147,8 @@
       const details = tokens.join(' ').trim();
 
       // Smart category guess from history: find most common category for
-      // transactions whose details contain the same merchant text
+      // transactions whose details contain the same merchant text. Only
+      // runs if no explicit category was matched.
       let guessedCategory = null;
       if (!categoryOverride && details) {
         const needle = details.toLowerCase();
@@ -4130,12 +4169,19 @@
 
       const cat = categoryOverride || guessedCategory;
 
+      // Auto-refund detection. If the user typed a negative amount AND
+      // the resolved category is an Expense, this is a return/refund.
+      // The sign of the amount becomes negative in storage so the
+      // category total nets correctly.
+      const isRefund = amountWasNegative && cat?.type === 'Expenses';
+
       return {
         date,                 // null if not provided (defaults to today)
         amount,               // null if not provided (parser failure)
         details,
         category: cat?.name || null,
         type: cat?.type || null,
+        isRefund,             // true if amount was negative and type=Expenses
         complete: amount !== null && cat !== null,
         wasGuessed: !categoryOverride && !!guessedCategory
       };
@@ -4162,15 +4208,19 @@
         const parsed = parseFastEntry(text, txs, categoriesByType);
         if (!parsed) return;
         if (parsed.complete) {
-          // Have everything we need — save directly and close
+          // Have everything we need — save directly and close.
+          // If isRefund is true, the amount is stored as negative so
+          // category totals net correctly (same convention as the
+          // "This is a return or refund" toggle in TxModal).
           const today = new Date();
           const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+          const finalAmount = parsed.isRefund ? -Math.abs(parsed.amount) : parsed.amount;
           onSave({
             id: 't' + Date.now(),
             date: parsed.date || todayStr,
             type: parsed.type,
             category: parsed.category,
-            amount: parsed.amount,
+            amount: finalAmount,
             details: parsed.details
           });
           onClose();
@@ -4201,7 +4251,12 @@
               <div className="fast-bar-preview">
                 {preview.date && <span className="pill">📅 {preview.date}</span>}
                 {!preview.date && <span className="pill muted">today</span>}
-                {preview.amount !== null && <span className="pill amount">${preview.amount.toFixed(2)}</span>}
+                {preview.amount !== null && (
+                  <span className="pill amount" style={preview.isRefund ? {color: 'var(--terra-ink)'} : undefined}>
+                    {preview.isRefund ? '−' : ''}${preview.amount.toFixed(2)}
+                    {preview.isRefund && <span style={{marginLeft: 6, fontSize: 10, opacity: 0.8}}>refund</span>}
+                  </span>
+                )}
                 {preview.amount === null && <span className="pill muted">amount?</span>}
                 {preview.category && <span className="pill cat">{preview.category}{preview.wasGuessed ? ' (guessed)' : ''}</span>}
                 {!preview.category && preview.details && <span className="pill muted">no category match</span>}
@@ -5486,6 +5541,7 @@
             defaultCategory={cmdPrefill?.category || lastUsed.category}
             prefillAmount={cmdPrefill?.amount}
             prefillDetails={cmdPrefill?.details}
+            prefillIsRefund={cmdPrefill?.isRefund}
             existingTx={editingTx}
           />
           <FastEntryBar
