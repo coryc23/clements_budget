@@ -1370,11 +1370,46 @@
       );
     }
 
-    var Donut = function({ slices, size=110, thickness=15 }) {
+    var Donut = function({ slices, size=110, thickness=15, negative=false, percentLabel=null, captionLabel=null }) {
       const total = slices.reduce((a,b)=>a+b.value,0) || 1;
       const r = (size - thickness) / 2;
       const c = size/2;
       const circ = 2*Math.PI*r;
+
+      // When `negative` mode is on, we render a single counterclockwise
+      // arc in terracotta (red) to signal overspending. The slice value
+      // represents the magnitude (e.g. 0.3 for "30% over"). Capped to
+      // 100% visually so the arc doesn't loop around itself for extreme
+      // overspending — the number still shows the real value.
+      if (negative) {
+        // Single slice = overspending magnitude (0..1 visually capped)
+        const overshoot = Math.min(1, slices[0].value);
+        const arcLen = overshoot * circ - 2;
+        // Counterclockwise: same -90° rotation as forward, but we flip
+        // the SVG horizontally so the arc sweeps the opposite way.
+        // This keeps the arc starting at 12 o'clock but going left.
+        const dash = `${Math.max(0, arcLen)} ${circ - Math.max(0, arcLen)}`;
+        return (
+          <svg className="donut" viewBox={`0 0 ${size} ${size}`}>
+            <circle cx={c} cy={c} r={r} fill="none" stroke="var(--bg-soft)" strokeWidth={thickness}/>
+            <circle
+              cx={c} cy={c} r={r} fill="none"
+              stroke="var(--terracotta)"
+              strokeWidth={thickness}
+              strokeDasharray={dash}
+              transform={`rotate(-90 ${c} ${c}) scale(-1 1) translate(-${size} 0)`}
+            />
+            <text x={c} y={c-2} textAnchor="middle" dominantBaseline="middle" fontSize="18" fill="var(--terra-ink)">
+              {percentLabel != null ? percentLabel : `-${Math.round(overshoot*100)}%`}
+            </text>
+            <text className="caption" x={c} y={c+16} textAnchor="middle" dominantBaseline="middle" fill="var(--terra-ink)">
+              {captionLabel || 'OVER'}
+            </text>
+          </svg>
+        );
+      }
+
+      // Normal (positive) mode — original implementation
       let offset = 0;
       return (
         <svg className="donut" viewBox={`0 0 ${size} ${size}`}>
@@ -1390,8 +1425,12 @@
             offset += (s.value/total)*circ;
             return el;
           })}
-          <text x={c} y={c-2} textAnchor="middle" dominantBaseline="middle" fontSize="20">{Math.round((slices[0].value/total)*100)}%</text>
-          <text className="caption" x={c} y={c+16} textAnchor="middle" dominantBaseline="middle">SAVED</text>
+          <text x={c} y={c-2} textAnchor="middle" dominantBaseline="middle" fontSize="20">
+            {percentLabel != null ? percentLabel : `${Math.round((slices[0].value/total)*100)}%`}
+          </text>
+          <text className="caption" x={c} y={c+16} textAnchor="middle" dominantBaseline="middle">
+            {captionLabel || 'SAVED'}
+          </text>
         </svg>
       );
     }
@@ -5619,12 +5658,64 @@
             <div className="card">
               <div className="stat-label">Savings rate</div>
               <div className="donut-wrap" style={{marginTop:4}}>
-                <Donut slices={[
-                  { value: Math.max(0, totals.incA - totals.expA), color: 'var(--blue)' },
-                  { value: Math.max(0, totals.expA), color: 'var(--line)' }
-                ]}/>
+                {/*
+                  Three possible visualizations:
+
+                  1. Positive rate (saved > 0): standard blue arc clockwise
+                     showing the saved portion of income.
+                  2. Negative rate (overspent): terracotta arc counter-
+                     clockwise showing magnitude of overspending.
+                  3. Zero income, non-zero spending: same as negative
+                     (essentially "infinite" overspending).
+
+                  "Saved" here = income - expenses. This already accounts
+                  for savings contributions because they came out of
+                  checking but aren't in `expA`, so the net flow captures
+                  intentional saves (Roth, etc.) implicitly.
+                */}
+                {(() => {
+                  const saved = totals.incA - totals.expA;
+                  const rate = totals.savingsRate;  // already computed: (inc - exp) / inc
+                  const isNegative = saved < 0 || (totals.incA <= 0 && totals.expA > 0);
+                  if (isNegative) {
+                    // Magnitude of overshoot, used to size the red arc
+                    const overMagnitude = totals.incA > 0
+                      ? Math.abs(saved) / totals.incA
+                      : 1; // no income, fully red
+                    return (
+                      <Donut
+                        slices={[{ value: overMagnitude }]}
+                        negative={true}
+                        percentLabel={totals.incA > 0 ? `${Math.round(rate*100)}%` : '—'}
+                        captionLabel="OVER"
+                      />
+                    );
+                  }
+                  return (
+                    <Donut slices={[
+                      { value: Math.max(0, saved), color: 'var(--blue)' },
+                      { value: Math.max(0, totals.expA), color: 'var(--line)' }
+                    ]}/>
+                  );
+                })()}
                 <div className="legend">
-                  <div className="legend-row"><span className="legend-dot" style={{background:'var(--blue)'}}/><span>Saved <strong className="num">{fmt(Math.max(0, totals.incA - totals.expA))}</strong></span></div>
+                  <div className="legend-row">
+                    <span className="legend-dot" style={{background:'var(--blue)'}}/>
+                    <span>
+                      Saved <strong className="num" style={{
+                        color: (totals.incA - totals.expA) < 0 ? 'var(--terra-ink)' : undefined
+                      }}>
+                        {(totals.incA - totals.expA) < 0 ? '−' : ''}{fmt(Math.abs(totals.incA - totals.expA))}
+                      </strong>
+                    </span>
+                  </div>
+                  {totals.savA > 0 && (
+                    <div className="legend-row" style={{paddingLeft: 14, fontSize: 11, opacity: 0.85}}>
+                      <span style={{color: 'var(--ink-3)', fontStyle: 'italic'}}>
+                        incl. <strong className="num">{fmt(totals.savA)}</strong> to savings
+                      </span>
+                    </div>
+                  )}
                   <div className="legend-row"><span className="legend-dot" style={{background:'var(--terracotta)'}}/><span>Spent <strong className="num">{fmt(totals.expA)}</strong></span></div>
                   <div className="legend-row"><span className="legend-dot" style={{background:'var(--sage)'}}/><span>Income <strong className="num">{fmt(totals.incA)}</strong></span></div>
                 </div>
